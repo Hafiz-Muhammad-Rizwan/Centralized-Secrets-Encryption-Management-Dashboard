@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [initial-frontend]
+    branches: [main, initial-frontend]
   workflow_dispatch:
 
 permissions:
@@ -10,14 +10,14 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
+concurrency:   
   group: pages
   cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
+    steps:     
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup Node
