@@ -863,6 +863,81 @@ a { text-decoration: none; color: inherit; }
   padding: 0 8px;
 }
 
+/* ─── LOGOUT BUTTON ─── */
+.logout-button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: calc(100% - 16px);
+  margin: 6px 8px 0;
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  color: var(--crimson);
+  font-size: 12.5px;
+  font-weight: 500;
+  background: transparent;
+  border: 1px solid transparent;
+  transition: background var(--transition), border-color var(--transition), opacity var(--transition);
+  opacity: 0.75;
+}
+.logout-button:hover {
+  background: rgba(248, 113, 113, 0.08);
+  border-color: rgba(248, 113, 113, 0.18);
+  opacity: 1;
+}
+.logout-button svg { flex-shrink: 0; }
+
+/* ─── SECONDARY & DANGER BUTTONS ─── */
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--elevated);
+  color: var(--muted);
+  border: 1px solid var(--border-strong);
+  transition: background var(--transition), color var(--transition);
+}
+.secondary-button:hover {
+  background: rgba(255,255,255,.07);
+  color: var(--text);
+}
+.danger-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 600;
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--crimson);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  transition: background var(--transition), border-color var(--transition);
+}
+.danger-button:hover {
+  background: rgba(248, 113, 113, 0.22);
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+/* ─── LOGOUT MODAL OVERRIDES ─── */
+.logout-modal { max-width: 420px; }
+.logout-note {
+  background: rgba(248, 113, 113, 0.07);
+  border-color: rgba(248, 113, 113, 0.18);
+  color: var(--muted);
+}
+.logout-note svg { color: var(--crimson); }
+.logout-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
 /* ─── CONTENT AREA ─── */
 .role-content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
