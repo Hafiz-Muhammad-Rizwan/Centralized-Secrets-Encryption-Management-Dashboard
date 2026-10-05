@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Activity,
   AlertOctagon,
@@ -31,6 +32,7 @@ import {
   UsersRound,
   X,
   Zap,
+  LogOut,
 } from "lucide-react";
 
 export type WorkspaceRole = "Team Lead" | "Developer" | "Security Analyst";
@@ -1188,9 +1190,21 @@ function OverviewContent({ role, content, onAction, onNavigate }: {
 
 export default function RoleWorkspace({ role }: { role: WorkspaceRole }) {
   const content = roleContent[role];
+  const router = useRouter();
   const [active, setActive] = useState("Overview");
   const [showToast, setShowToast] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+
+  const handleLogout = () => {
+    // Clear any session/local storage data
+    if (typeof window !== "undefined") {
+      sessionStorage.clear();
+      localStorage.removeItem("currentUser");
+    }
+    setShowLogoutModal(false);
+    router.push("/login");
+  };
 
   const triggerToast = () => {
     setShowToast(true);
@@ -1305,6 +1319,15 @@ export default function RoleWorkspace({ role }: { role: WorkspaceRole }) {
             <span>{role}</span>
           </div>
         </div>
+
+        <button
+          className="logout-button"
+          onClick={() => setShowLogoutModal(true)}
+          title="Sign out of your workspace"
+        >
+          <LogOut size={16} />
+          <span>Sign out</span>
+        </button>
       </aside>
 
       {/* ── CONTENT ── */}
@@ -1349,6 +1372,34 @@ export default function RoleWorkspace({ role }: { role: WorkspaceRole }) {
             <button className="primary-button full" onClick={() => { setShowModal(false); triggerToast(); }}>
               {role === "Team Lead" ? "Approve request" : "Submit request"} <ArrowUpRight size={15} />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── LOGOUT MODAL ── */}
+      {showLogoutModal && (
+        <div className="modal-backdrop" onClick={() => setShowLogoutModal(false)}>
+          <div className="request-modal logout-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <span className="eyebrow"><span className="eyebrow-line" />Session management</span>
+                <h2>Sign out of vaultline.</h2>
+                <p>Your active leases and session data will be cleared. You will be returned to the login page.</p>
+              </div>
+              <button className="close-button" onClick={() => setShowLogoutModal(false)}><X size={18} /></button>
+            </div>
+            <div className="modal-note logout-note">
+              <LogOut size={16} />
+              <span>Signed in as <strong>{role === "Developer" ? "Rizwan" : role === "Team Lead" ? "Hafiz" : "Zaid"}</strong> · {role}</span>
+            </div>
+            <div className="logout-actions">
+              <button className="secondary-button" onClick={() => setShowLogoutModal(false)}>
+                Cancel
+              </button>
+              <button className="danger-button" onClick={handleLogout}>
+                <LogOut size={15} /> Sign out
+              </button>
+            </div>
           </div>
         </div>
       )}
