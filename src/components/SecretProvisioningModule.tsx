@@ -34,7 +34,7 @@ export default function SecretProvisioningModule({
   const [name, setName] = useState("");
   const [env, setEnv] = useState<"PROD" | "STAGING" | "DEV">("PROD");
   const [type, setType] = useState("API Key");
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState("DEMO_ONLY_NOT_A_CREDENTIAL");
   const [rotationPolicy, setRotationPolicy] = useState("30 Days");
   const [service, setService] = useState("");
 
@@ -57,14 +57,19 @@ export default function SecretProvisioningModule({
 
     if (score < 40) return { score, label: "Weak Entropy", color: "var(--crimson)", width: `${score}%` };
     if (score < 75) return { score, label: "Medium Entropy", color: "var(--amber)", width: `${score}%` };
-    return { score, label: "High Entropy (AES-256 Safe)", color: "var(--emerald)", width: "100%" };
+    return { score, label: "Built-in sample", color: "var(--emerald)", width: "100%" };
   };
 
   const entropy = calculateEntropy(value);
 
   // Copy helper
-  const handleCopy = (text: string, field: string) => {
-    navigator.clipboard.writeText(text);
+  const handleCopy = async (text: string, field: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      onTriggerToast("Clipboard unavailable. Nothing was copied.");
+      return;
+    }
     setCopiedField(field);
     onTriggerToast(`Copied ${field} to clipboard`);
     setTimeout(() => setCopiedField(null), 2000);
@@ -102,18 +107,13 @@ export default function SecretProvisioningModule({
 
     setErrors([]);
 
-    // Generate simulated cryptographic artifacts
-    const pseudoRandomHex = (length: number) => {
-      const chars = "0123456789abcdef";
-      let res = "";
-      for (let i = 0; i < length; i++) {
-        res += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-      return res;
-    };
-
-    const newId = `sec_${pseudoRandomHex(7)}`;
-    const newFingerprint = `sha256:${pseudoRandomHex(44)}`;
+    // This public demo accepts only its built-in sample payload.
+    if (value !== "DEMO_ONLY_NOT_A_CREDENTIAL" || service.trim().length > 100) {
+      setErrors(["Only the built-in sample payload and service names up to 100 characters are allowed."]);
+      return;
+    }
+    const newId = `demo_${crypto.randomUUID()}`;
+    const newFingerprint = "Not computed — demo data";
 
     const newSecret: SecretRecord = {
       id: newId,
@@ -124,10 +124,10 @@ export default function SecretProvisioningModule({
       lastRotated: "Just now",
       accessCount: 1,
       rotationPolicy,
-      algorithm: "AES-256-GCM",
+      algorithm: "None — demo data",
       fingerprint: newFingerprint,
       maskedValue: "••••••••••••••••",
-      plainValue: value.trim(),
+      plainValue: "DEMO_ONLY_NOT_A_CREDENTIAL",
       createdAt: new Date().toISOString().split("T")[0],
       isNew: true,
     };
@@ -135,18 +135,18 @@ export default function SecretProvisioningModule({
     // Save and notify
     onSecretAdded(newSecret);
     setRecentlyProvisioned(newSecret);
-    onTriggerToast(`Secret '${trimmedName}' encrypted & provisioned to ${env} vault.`);
+    onTriggerToast(`Secret '${trimmedName}' added to the ${env} demo (memory only).`);
 
     // Reset form
     setName("");
-    setValue("");
+    setValue("DEMO_ONLY_NOT_A_CREDENTIAL");
     setService("");
     setShowPassword(false);
   };
 
   const handleReset = () => {
     setName("");
-    setValue("");
+    setValue("DEMO_ONLY_NOT_A_CREDENTIAL");
     setService("");
     setErrors([]);
     setShowPassword(false);
@@ -171,8 +171,7 @@ export default function SecretProvisioningModule({
           Secret Provisioning &amp; Encryption Vault
         </h2>
         <p style={{ color: "var(--muted)", fontSize: "13.5px", maxWidth: "680px" }}>
-          Provision and securely encrypt new secrets, database credentials, API keys, or certificates into the centralized
-          vault. All inputs are validated for entropy and encrypted with simulated AES-256-GCM before registration.
+          Add sample records to this browser view. Payloads are fixed demo text; no encryption or persistent storage is performed. The newest 100 records are kept until you leave or reload.
         </p>
       </div>
 
@@ -298,9 +297,10 @@ export default function SecretProvisioningModule({
                 <FileKey2 size={16} style={{ color: "var(--muted)" }} />
                 <input
                   type={showPassword ? "text" : "password"}
-                  placeholder="Enter plaintext credential payload (min 8 chars)"
+                  aria-label="Built-in sample payload"
+                  readOnly
                   value={value}
-                  onChange={(e) => setValue(e.target.value)}
+
                   style={{ width: "100%", color: "var(--text)", fontSize: "13px", fontFamily: "monospace" }}
                 />
                 <button
@@ -398,7 +398,7 @@ export default function SecretProvisioningModule({
               </div>
             </div>
             <p style={{ fontSize: "12.5px", color: "var(--muted)", lineHeight: "1.5", margin: 0 }}>
-              Secrets are encrypted using AES-256-GCM authenticated cipher with a unique initialization vector (IV) per entry.
+              This demo does not encrypt data. Real secrets require an authenticated backend and managed encryption keys.
               Payloads are strictly masked by default to protect against unauthorized shoulder-surfing and memory snooping.
             </p>
           </div>
@@ -444,7 +444,7 @@ export default function SecretProvisioningModule({
 
                 <div style={{ display: "flex", justifyContent: "space-between", background: "rgba(255,255,255,0.82)", padding: "8px 12px", borderRadius: "var(--radius)", alignItems: "center" }}>
                   <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "200px" }}>
-                    <span style={{ color: "var(--dim)", fontSize: "10px", display: "block" }}>SHA-256 Fingerprint</span>
+                    <span style={{ color: "var(--dim)", fontSize: "10px", display: "block" }}>Demo fingerprint status</span>
                     <span style={{ fontFamily: "monospace", fontSize: "11px", color: "var(--muted)" }}>{recentlyProvisioned.fingerprint}</span>
                   </div>
                   <button
@@ -512,7 +512,7 @@ export default function SecretProvisioningModule({
               <Info size={24} style={{ color: "var(--dim)" }} />
               <strong style={{ fontSize: "13px", color: "var(--muted)" }}>No Secret Provisioned In This Session</strong>
               <p style={{ fontSize: "12px", color: "var(--dim)", margin: 0, maxWidth: "260px" }}>
-                Complete the form on the left to generate and verify your encrypted secret payload.
+                Complete the form to preview a sample record. Do not enter sensitive metadata.
               </p>
             </div>
           )}

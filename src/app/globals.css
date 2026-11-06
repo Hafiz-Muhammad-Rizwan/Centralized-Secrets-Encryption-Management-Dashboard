@@ -2024,3 +2024,13 @@ a:focus-visible {
     transition-delay: 0ms !important;
   }
 }
+
+.demo-notice {
+  padding: 12px 24px;
+  background: #fff4ce;
+  color: #513900;
+  font-size: 13px;
+  line-height: 1.5;
+  border-bottom: 1px solid #dbc580;
+}
+.demo-role-picker { display: grid; gap: 12px; }

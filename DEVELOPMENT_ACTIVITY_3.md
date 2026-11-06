@@ -1,3 +1,5 @@
+> Historical coursework: security claims below describe a simulation, not enforced controls. See [the current security audit](SECURITY_APPLIED_PRINCIPLES.md).
+
 # Development Activity 3 — Parallel Module Development and Integration
 
 **Semester Project:** Centralized Secrets Encryption Management Dashboard (Vaultline)  

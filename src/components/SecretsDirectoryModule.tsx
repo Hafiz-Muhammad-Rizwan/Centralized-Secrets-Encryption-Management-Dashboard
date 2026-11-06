@@ -69,7 +69,7 @@ export default function SecretsDirectoryModule({
     } else {
       setIsRevealed(true);
       setRevealCountdown(10);
-      onTriggerToast("Authorized: Secret value revealed (10s auto-mask active).");
+      onTriggerToast("Demo sample shown (10s display timer).");
     }
   };
 
@@ -108,8 +108,13 @@ export default function SecretsDirectoryModule({
   }, [secrets]);
 
   // Clipboard copy helpers
-  const copyText = (text: string, type: "id" | "fingerprint") => {
-    navigator.clipboard.writeText(text);
+  const copyText = async (text: string, type: "id" | "fingerprint") => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      onTriggerToast("Clipboard unavailable. Nothing was copied.");
+      return;
+    }
     if (type === "id") {
       setCopiedId(true);
       setTimeout(() => setCopiedId(false), 2000);
@@ -117,7 +122,7 @@ export default function SecretsDirectoryModule({
     } else {
       setCopiedFingerprint(true);
       setTimeout(() => setCopiedFingerprint(false), 2000);
-      onTriggerToast("SHA-256 fingerprint copied to clipboard");
+      onTriggerToast("Demo fingerprint status copied to clipboard");
     }
   };
 
@@ -348,7 +353,7 @@ export default function SecretsDirectoryModule({
                 <button
                   onClick={() => {
                     onRotateSecret(secret.id);
-                    onTriggerToast(`Rotated secret '${secret.name}' to new cryptographic generation.`);
+                    onTriggerToast(`Rotated secret '${secret.name}' in the demo; no credential was changed.`);
                   }}
                   className="filter-button"
                   style={{
@@ -488,7 +493,7 @@ export default function SecretsDirectoryModule({
               {/* SHA-256 Fingerprint */}
               <div style={{ background: "rgba(255,255,255,0.84)", padding: "10px 14px", borderRadius: "var(--radius)", border: "1px solid var(--border)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-                  <span style={{ color: "var(--dim)", fontSize: "10px" }}>Key Fingerprint (SHA-256)</span>
+                  <span style={{ color: "var(--dim)", fontSize: "10px" }}>Demo fingerprint status</span>
                   <button
                     onClick={() => copyText(inspectingSecret.fingerprint, "fingerprint")}
                     style={{ color: copiedFingerprint ? "var(--emerald)" : "var(--muted)", fontSize: "11px", display: "flex", alignItems: "center", gap: "4px" }}

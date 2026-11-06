@@ -15,6 +15,7 @@ import {
   Eye,
   Fingerprint,
   FileKey2,
+  Fingerprint,
   Globe,
   Hash,
   KeyRound,
@@ -37,7 +38,7 @@ import {
 } from "lucide-react";
 import SecretProvisioningModule from "./SecretProvisioningModule";
 import SecretsDirectoryModule from "./SecretsDirectoryModule";
-import { loadSecrets, saveSecrets, SecretRecord } from "./secretsStore";
+import { loadSecrets, SecretRecord } from "./secretsStore";
 import type { LucideIcon } from "lucide-react";
 
 export type WorkspaceRole = "Team Lead" | "Developer" | "Security Analyst";
@@ -1045,7 +1046,7 @@ function OverviewContent({ role, content, onAction, onNavigate }: {
             </div>
             <strong style={{ fontSize: "15px", display: "block", color: "var(--text)" }}>Secret Provisioning &amp; Vault</strong>
             <p style={{ fontSize: "12.5px", color: "var(--muted)", margin: "4px 0 0" }}>
-              Register &amp; encrypt new credentials with client-side validation, entropy meter, and AES-256-GCM.
+              Create sample records in memory with basic input validation. No encryption is performed.
             </p>
           </div>
           <button
@@ -1076,7 +1077,7 @@ function OverviewContent({ role, content, onAction, onNavigate }: {
             </div>
             <strong style={{ fontSize: "15px", display: "block", color: "var(--text)" }}>Secrets Directory &amp; Audit Explorer</strong>
             <p style={{ fontSize: "12.5px", color: "var(--muted)", margin: "4px 0 0" }}>
-              Explore, filter by environment, inspect encrypted credentials with auto-masking, and trigger rotations.
+              Explore sample records, filter by environment, and simulate reveals and rotations.
             </p>
           </div>
           <button
@@ -1188,11 +1189,7 @@ export default function RoleWorkspace({ role, initialTab = "Overview" }: { role:
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const handleLogout = () => {
-    // Clear any session/local storage data
-    if (typeof window !== "undefined") {
-      sessionStorage.clear();
-      localStorage.removeItem("currentUser");
-    }
+    setSecrets(loadSecrets());
     setShowLogoutModal(false);
     router.push("/login");
   };
@@ -1222,8 +1219,7 @@ export default function RoleWorkspace({ role, initialTab = "Overview" }: { role:
         <SecretProvisioningModule
           onSecretAdded={(newSecret) => {
             setSecrets((prev) => {
-              const updated = [newSecret, ...prev];
-              saveSecrets(updated);
+              const updated = [newSecret, ...prev].slice(0, 100);
               return updated;
             });
           }}
@@ -1244,7 +1240,6 @@ export default function RoleWorkspace({ role, initialTab = "Overview" }: { role:
                   ? { ...s, lastRotated: "Just now", accessCount: s.accessCount + 1 }
                   : s
               );
-              saveSecrets(updated);
               return updated;
             });
           }}
@@ -1269,7 +1264,6 @@ export default function RoleWorkspace({ role, initialTab = "Overview" }: { role:
                 const updated = prev.map((s) =>
                   s.id === id ? { ...s, lastRotated: "Just now", accessCount: s.accessCount + 1 } : s
                 );
-                saveSecrets(updated);
                 return updated;
               });
             }}
