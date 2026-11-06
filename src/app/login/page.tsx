@@ -1,13 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Fingerprint, LockKeyhole, ShieldCheck } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
 export default function LoginPage() {
-  const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState("");
   const router = useRouter();
   const reduceMotion = useReducedMotion();
 
@@ -22,7 +19,7 @@ export default function LoginPage() {
     : {
         initial: { opacity: 0, y: 18 },
         animate: { opacity: 1, y: 0 },
-        transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] },
+        transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] as const },
       };
 
   return (
@@ -45,8 +42,8 @@ export default function LoginPage() {
           <p>One secure control plane for every secret, lease, and decision across your cloud.</p>
         </div>
         <div className="visual-footer">
-          <span><ShieldCheck size={15} /> Zero-knowledge architecture</span>
-          <span>v2.4.0 · SOC 2 ready</span>
+          <span><ShieldCheck size={15} /> Public demonstration</span>
+          <span>Sample data only</span>
         </div>
       </motion.section>
 
@@ -65,53 +62,24 @@ export default function LoginPage() {
 
           <div className="login-heading">
             <div className="login-icon"><Fingerprint size={20} /></div>
-            <span className="eyebrow">Welcome back</span>
-            <h2>Sign in to your workspace</h2>
-            <p>Use the credentials provided by your team lead.</p>
+            <span className="eyebrow">Explore the demo</span>
+            <h2>Choose a demo workspace</h2>
+            <p>No account or password is needed. All roles are public.</p>
           </div>
 
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              const form = new FormData(event.currentTarget);
-              const username = String(form.get("username"));
-              const password = String(form.get("password"));
-              if (password !== "123456" || !(username in accounts)) {
-                setError("Those credentials do not match an active workspace account.");
-                return;
-              }
-              setError("");
-              router.push(accounts[username as keyof typeof accounts]);
-            }}
-          >
-            <label>
-              Username
-              <input name="username" type="text" placeholder="Hafiz, Rizwan, or Zaid" required />
-            </label>
-            <label>
-              Password
-              <div className="password-input">
-                <input name="password" type={showPassword ? "text" : "password"} placeholder="Enter your password" required />
-                <button type="button" onClick={() => setShowPassword(!showPassword)}>{showPassword ? "Hide" : "Show"}</button>
-              </div>
-            </label>
-            {error && <p className="login-error">{error}</p>}
-            <div className="form-row">
-              <label className="checkbox-label">
-                <input type="checkbox" /> <span>Remember this device</span>
-              </label>
-              <a href="mailto:security@acme.cloud">Need help?</a>
-            </div>
-            <button className="primary-button login-button" type="submit">
-              Continue securely<ArrowRight size={16} />
-            </button>
-          </form>
+          <div className="demo-role-picker">
+            {Object.entries(accounts).map(([name, path]) => (
+              <button className="primary-button login-button" key={path} onClick={() => router.push(path)}>
+                {name} · {path.slice(1).replaceAll("-", " ")} <ArrowRight size={16} />
+              </button>
+            ))}
+          </div>
 
           <div className="login-security">
             <div><ShieldCheck size={16} /></div>
-            <span>Protected by hardware-backed authentication<br />and automatic session expiry.</span>
+            <span>Interface simulation only.<br />No authentication or encryption is performed.</span>
           </div>
-          <p className="login-admin">Access is provisioned by your team lead. <a href="mailto:security@acme.cloud">Contact security</a></p>
+          <p className="login-admin">Never enter real credentials into this demo. <a href="mailto:security@acme.cloud">Contact security</a></p>
         </div>
       </motion.section>
     </motion.main>
