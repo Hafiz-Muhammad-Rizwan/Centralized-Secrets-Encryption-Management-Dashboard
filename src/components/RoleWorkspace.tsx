@@ -13,6 +13,7 @@ import {
   ClipboardCheck,
   Clock,
   Eye,
+  Fingerprint,
   FileKey2,
   Fingerprint,
   Globe,
