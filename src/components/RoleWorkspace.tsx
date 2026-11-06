@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { motion, useReducedMotion } from "motion/react";
 import {
   Activity,
   AlertOctagon,
@@ -13,13 +14,13 @@ import {
   Clock,
   Eye,
   FileKey2,
-  Fingerprint,
   Globe,
   Hash,
   KeyRound,
   LayoutGrid,
   Lock,
   LockKeyhole,
+  LogOut,
   Plus,
   RefreshCw,
   Search,
@@ -32,8 +33,11 @@ import {
   UsersRound,
   X,
   Zap,
-  LogOut,
 } from "lucide-react";
+import SecretProvisioningModule from "./SecretProvisioningModule";
+import SecretsDirectoryModule from "./SecretsDirectoryModule";
+import { loadSecrets, saveSecrets, SecretRecord } from "./secretsStore";
+import type { LucideIcon } from "lucide-react";
 
 export type WorkspaceRole = "Team Lead" | "Developer" | "Security Analyst";
 
@@ -94,8 +98,6 @@ const roleContent = {
     ],
   },
 } as const;
-
-import type { LucideIcon } from "lucide-react";
 
 type NavItem = { label: string; icon: LucideIcon; count?: string; danger?: boolean };
 
@@ -209,86 +211,6 @@ function ApprovalQueuePage({ onAction }: { onAction: () => void }) {
             <button className={`status-pill ${r.status}`} onClick={onAction}>
               {r.status === "pending" ? "Review" : "Approved"}
             </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   SUB-PAGE: TEAM LEAD — SECRETS INVENTORY
-   ═══════════════════════════════════════════════════════════════ */
-
-function SecretsInventoryPage() {
-  const secrets = [
-    { name: "payments-prod", type: "API Key", env: "PROD", lastRotated: "3 days ago", accessCount: 12 },
-    { name: "stripe-webhook", type: "Webhook Secret", env: "STAGING", lastRotated: "7 days ago", accessCount: 8 },
-    { name: "orders-db-readonly", type: "DB Credential", env: "DEV", lastRotated: "14 days ago", accessCount: 5 },
-    { name: "github-app-private-key", type: "SSH Key", env: "PROD", lastRotated: "1 day ago", accessCount: 3 },
-    { name: "redis-cache-prod", type: "Password", env: "PROD", lastRotated: "21 days ago", accessCount: 15 },
-    { name: "aws-deploy-key", type: "IAM Key", env: "STAGING", lastRotated: "5 days ago", accessCount: 7 },
-    { name: "monitoring-api-token", type: "API Token", env: "DEV", lastRotated: "10 days ago", accessCount: 2 },
-  ];
-
-  return (
-    <div className="sub-page">
-      <div className="sub-page-header">
-        <div className="eyebrow"><span className="eyebrow-line" />Secrets inventory</div>
-        <h2>All managed secrets</h2>
-        <p>View and manage secrets across your workspace environments.</p>
-      </div>
-
-      <div className="stats-row">
-        <div className="stat-card accent">
-          <div className="stat-label">Total secrets</div>
-          <div className="stat-value">7</div>
-          <div className="stat-sub">Across 3 environments</div>
-        </div>
-        <div className="stat-card blue-accent">
-          <div className="stat-label">Production</div>
-          <div className="stat-value" style={{ color: "var(--blue)" }}>3</div>
-          <div className="stat-sub">All rotated within SLA</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Total access events</div>
-          <div className="stat-value">52</div>
-          <div className="stat-sub">Last 30 days</div>
-        </div>
-      </div>
-
-      <div className="action-bar">
-        <div className="action-bar-left">
-          <div className="search-input">
-            <Search size={15} />
-            <input placeholder="Search secrets..." />
-          </div>
-        </div>
-        <div className="action-bar-right">
-          <button className="filter-button active">All</button>
-          <button className="filter-button">PROD</button>
-          <button className="filter-button">STAGING</button>
-          <button className="filter-button">DEV</button>
-        </div>
-      </div>
-
-      <div className="data-table">
-        <div className="data-table-head cols-5">
-          <span>Secret name</span>
-          <span>Type</span>
-          <span>Environment</span>
-          <span>Last rotated</span>
-          <span>Access</span>
-        </div>
-        {secrets.map((s) => (
-          <div className="data-table-row cols-5" key={s.name}>
-            <div>
-              <strong>{s.name}</strong>
-            </div>
-            <span>{s.type}</span>
-            <span className={`env ${s.env === "PROD" ? "amber" : s.env === "STAGING" ? "emerald" : "slate"}`}>{s.env}</span>
-            <span>{s.lastRotated}</span>
-            <span>{s.accessCount} events</span>
           </div>
         ))}
       </div>
@@ -492,7 +414,7 @@ function RequestAccessPage({ onSubmit }: { onSubmit: () => void }) {
       </div>
 
       <div style={{ maxWidth: "520px" }}>
-        <div className="request-modal" style={{ background: "linear-gradient(165deg, rgba(23,23,27,.9), rgba(14,14,17,.95))", border: "1px solid var(--border)", boxShadow: "none", animation: "fadeUp .35s ease-out both" }}>
+        <div className="request-modal" style={{ background: "linear-gradient(165deg, rgba(255,255,255,.96), rgba(243,247,255,.94))", border: "1px solid var(--border)", boxShadow: "none", animation: "fadeUp .35s ease-out both" }}>
           <label>Secret or KMS key
             <div className="input-wrap">
               <FileKey2 size={16} />
@@ -1101,6 +1023,71 @@ function OverviewContent({ role, content, onAction, onNavigate }: {
         ))}
       </div>
 
+      {/* ── PARALLEL MODULES SPOTLIGHT (ACTIVITY 3) ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>
+        <div
+          style={{
+            background: "linear-gradient(165deg, rgba(52,211,153,0.10), rgba(255,255,255,0.95))",
+            border: "1px solid rgba(52,211,153,0.25)",
+            borderRadius: "var(--radius-lg)",
+            padding: "20px",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            gap: "14px",
+          }}
+        >
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <span className="env emerald" style={{ fontSize: "10.5px" }}>MODULE 1</span>
+              <span style={{ fontSize: "11px", color: "var(--muted)" }}>Hafiz Muhammad Rizwan</span>
+            </div>
+            <strong style={{ fontSize: "15px", display: "block", color: "var(--text)" }}>Secret Provisioning &amp; Vault</strong>
+            <p style={{ fontSize: "12.5px", color: "var(--muted)", margin: "4px 0 0" }}>
+              Register &amp; encrypt new credentials with client-side validation, entropy meter, and AES-256-GCM.
+            </p>
+          </div>
+          <button
+            onClick={() => onNavigate("Provision Secret")}
+            className="filter-button"
+            style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: "6px", color: "var(--emerald)", borderColor: "rgba(52,211,153,0.3)" }}
+          >
+            Launch Module 1 <ArrowUpRight size={14} />
+          </button>
+        </div>
+
+        <div
+          style={{
+            background: "linear-gradient(165deg, rgba(96,165,250,0.10), rgba(255,255,255,0.95))",
+            border: "1px solid rgba(96,165,250,0.25)",
+            borderRadius: "var(--radius-lg)",
+            padding: "20px",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            gap: "14px",
+          }}
+        >
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <span className="env blue" style={{ fontSize: "10.5px" }}>MODULE 2</span>
+              <span style={{ fontSize: "11px", color: "var(--muted)" }}>Zaid Hassan</span>
+            </div>
+            <strong style={{ fontSize: "15px", display: "block", color: "var(--text)" }}>Secrets Directory &amp; Audit Explorer</strong>
+            <p style={{ fontSize: "12.5px", color: "var(--muted)", margin: "4px 0 0" }}>
+              Explore, filter by environment, inspect encrypted credentials with auto-masking, and trigger rotations.
+            </p>
+          </div>
+          <button
+            onClick={() => onNavigate("Secrets Directory")}
+            className="filter-button"
+            style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: "6px", color: "var(--blue)", borderColor: "rgba(96,165,250,0.3)" }}
+          >
+            Launch Module 2 <ArrowUpRight size={14} />
+          </button>
+        </div>
+      </div>
+
       <div className="role-panels">
         <div className="panel role-table-panel">
           <div className="panel-header">
@@ -1188,10 +1175,13 @@ function OverviewContent({ role, content, onAction, onNavigate }: {
    MAIN COMPONENT
    ═══════════════════════════════════════════════════════════════ */
 
-export default function RoleWorkspace({ role }: { role: WorkspaceRole }) {
+export default function RoleWorkspace({ role, initialTab = "Overview" }: { role: WorkspaceRole; initialTab?: string }) {
   const content = roleContent[role];
   const router = useRouter();
-  const [active, setActive] = useState("Overview");
+  const reduceMotion = useReducedMotion();
+  const [active, setActive] = useState(initialTab);
+  const [secrets, setSecrets] = useState<SecretRecord[]>(() => loadSecrets());
+  const [toastMessage, setToastMessage] = useState<string>("The workspace has been updated.");
   const [showToast, setShowToast] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -1206,7 +1196,9 @@ export default function RoleWorkspace({ role }: { role: WorkspaceRole }) {
     router.push("/login");
   };
 
-  const triggerToast = () => {
+  const triggerToast = (msg?: string) => {
+    if (msg) setToastMessage(msg);
+    else setToastMessage("The workspace has been updated.");
     setShowToast(true);
     setTimeout(() => setShowToast(false), 3500);
   };
@@ -1223,14 +1215,67 @@ export default function RoleWorkspace({ role }: { role: WorkspaceRole }) {
 
   /* Render the active sub-page */
   function renderPage() {
+    /* Activity 3 Modules */
+    if (active === "Provision Secret") {
+      return (
+        <SecretProvisioningModule
+          onSecretAdded={(newSecret) => {
+            setSecrets((prev) => {
+              const updated = [newSecret, ...prev];
+              saveSecrets(updated);
+              return updated;
+            });
+          }}
+          onNavigateToDirectory={() => setActive("Secrets Directory")}
+          onTriggerToast={(msg) => triggerToast(msg)}
+        />
+      );
+    }
+
+    if (active === "Secrets Directory" || active === "Secrets inventory") {
+      return (
+        <SecretsDirectoryModule
+          secrets={secrets}
+          onRotateSecret={(id) => {
+            setSecrets((prev) => {
+              const updated = prev.map((s) =>
+                s.id === id
+                  ? { ...s, lastRotated: "Just now", accessCount: s.accessCount + 1 }
+                  : s
+              );
+              saveSecrets(updated);
+              return updated;
+            });
+          }}
+          onNavigateToProvision={() => setActive("Provision Secret")}
+          onTriggerToast={(msg) => triggerToast(msg)}
+        />
+      );
+    }
+
     /* Settings (shared) */
     if (active === "Workspace settings") return <WorkspaceSettingsPage />;
 
     /* Team Lead pages */
     if (role === "Team Lead") {
       switch (active) {
-        case "Approval queue": return <ApprovalQueuePage onAction={triggerToast} />;
-        case "Secrets inventory": return <SecretsInventoryPage />;
+        case "Approval queue": return <ApprovalQueuePage onAction={() => triggerToast()} />;
+        case "Secrets inventory": return (
+          <SecretsDirectoryModule
+            secrets={secrets}
+            onRotateSecret={(id) => {
+              setSecrets((prev) => {
+                const updated = prev.map((s) =>
+                  s.id === id ? { ...s, lastRotated: "Just now", accessCount: s.accessCount + 1 } : s
+                );
+                saveSecrets(updated);
+                return updated;
+              });
+            }}
+            onNavigateToProvision={() => setActive("Provision Secret")}
+            onTriggerToast={(msg) => triggerToast(msg)}
+          />
+        );
         case "Rotation schedules": return <RotationSchedulesPage />;
         case "Team directory": return <TeamDirectoryPage />;
       }
@@ -1239,8 +1284,8 @@ export default function RoleWorkspace({ role }: { role: WorkspaceRole }) {
     /* Developer pages */
     if (role === "Developer") {
       switch (active) {
-        case "My active leases": return <MyActiveLeasesPage onAction={triggerToast} />;
-        case "Request access": return <RequestAccessPage onSubmit={triggerToast} />;
+        case "My active leases": return <MyActiveLeasesPage onAction={() => triggerToast()} />;
+        case "Request access": return <RequestAccessPage onSubmit={() => triggerToast()} />;
         case "Request history": return <RequestHistoryPage />;
         case "Security posture": return <SecurityPosturePage />;
       }
@@ -1250,8 +1295,8 @@ export default function RoleWorkspace({ role }: { role: WorkspaceRole }) {
     if (role === "Security Analyst") {
       switch (active) {
         case "Audit trail": return <AuditTrailPage />;
-        case "Anomaly center": return <AnomalyCenterPage onAction={triggerToast} />;
-        case "Kill switch": return <KillSwitchPage onAction={triggerToast} />;
+        case "Anomaly center": return <AnomalyCenterPage onAction={() => triggerToast()} />;
+        case "Kill switch": return <KillSwitchPage onAction={() => triggerToast()} />;
         case "Incident history": return <IncidentHistoryPage />;
       }
     }
@@ -1261,9 +1306,19 @@ export default function RoleWorkspace({ role }: { role: WorkspaceRole }) {
   }
 
   return (
-    <main className={`role-shell role-${role.toLowerCase().replace(" ", "-")}`}>
+    <motion.main
+      className={`role-shell role-${role.toLowerCase().replace(" ", "-")}`}
+      initial={reduceMotion ? false : { opacity: 0, y: 14 }}
+      animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+      transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+    >
       {/* ── SIDEBAR ── */}
-      <aside className="role-sidebar">
+      <motion.aside
+        className="role-sidebar"
+        initial={reduceMotion ? false : { opacity: 0, x: -20 }}
+        animate={reduceMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
+        transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+      >
         <Brand />
 
         <div className="workspace-switcher">
@@ -1328,11 +1383,16 @@ export default function RoleWorkspace({ role }: { role: WorkspaceRole }) {
           <LogOut size={16} />
           <span>Sign out</span>
         </button>
-      </aside>
+      </motion.aside>
 
       {/* ── CONTENT ── */}
       <section className="role-content">
-        <header className="topbar">
+        <motion.header
+          className="topbar"
+          initial={reduceMotion ? false : { opacity: 0, y: -10 }}
+          animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1], delay: 0.05 }}
+        >
           <div className="breadcrumb">
             <span>Workspace</span>
             <span>/</span>
@@ -1342,11 +1402,17 @@ export default function RoleWorkspace({ role }: { role: WorkspaceRole }) {
             <button className="icon-button"><Search size={17} /></button>
             <button className="icon-button notification"><Bell size={17} /><i /></button>
           </div>
-        </header>
+        </motion.header>
 
-        <div className="role-page">
+        <motion.div
+          className="role-page"
+          key={active}
+          initial={reduceMotion ? false : { opacity: 0, y: 16 }}
+          animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+        >
           {renderPage()}
-        </div>
+        </motion.div>
       </section>
 
       {/* ── MODAL ── */}
@@ -1410,11 +1476,11 @@ export default function RoleWorkspace({ role }: { role: WorkspaceRole }) {
           <div className="toast-check"><Check size={14} /></div>
           <div>
             <strong>Action recorded</strong>
-            <span>The workspace has been updated.</span>
+            <span>{toastMessage}</span>
           </div>
           <button onClick={() => setShowToast(false)}><X size={14} /></button>
         </div>
       )}
-    </main>
+    </motion.main>
   );
 }
