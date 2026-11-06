@@ -3,5 +3,17 @@
   "framework": null,
   "buildCommand": "npm run build",
   "outputDirectory": "out",
-  "trailingSlash": true
+  "trailingSlash": true,
+  "redirects": [
+    {
+      "source": "/Centralized-Secrets-Encryption-Management-Dashboard",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/Centralized-Secrets-Encryption-Management-Dashboard/:path*",
+      "destination": "/:path*",
+      "permanent": true
+    }
+  ]
 }

@@ -15,7 +15,6 @@ import {
   Eye,
   Fingerprint,
   FileKey2,
-  Fingerprint,
   Globe,
   Hash,
   KeyRound,

@@ -30,6 +30,9 @@ including CSP hardening, and publishes `out/`. Keep the Vercel project Root Dire
 at the repository root, where `package.json` and `vercel.json` live. Do not set
 `GITHUB_PAGES=true` in Vercel. Push these changes to the connected branch to deploy
 them; redeploying an older commit will not include the fix.
+Vercel's `VERCEL=1` flag takes precedence over the GitHub Pages setting so its
+builds always use `/`. Old repository-prefixed URLs redirect to the equivalent
+root-level pages, preserving existing bookmarks.
 
 The home page and `/login/`, `/team-lead/`, `/developer/`, `/security-analyst/`,
 `/provision-secret/`, and `/secrets-directory/` work with sample data and no Supabase
