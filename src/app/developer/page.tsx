@@ -1,5 +1,7 @@
+import { requireRole } from "@/lib/auth/access";
 import RoleWorkspace from "@/components/RoleWorkspace";
 
-export default function DeveloperPage() {
+export default async function DeveloperPage() {
+  await requireRole("developer");
   return <RoleWorkspace role="Developer" />;
 }

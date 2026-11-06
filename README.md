@@ -1,50 +1,31 @@
-# Vaultline public UI demo
+# Vaultline authenticated workspace
 
-This is a Next.js static export for Vercel or GitHub Pages. It is **not a secrets manager**:
-all role routes are public, payloads are fixed sample text, and approval, rotation,
-lease, encryption, and audit controls are simulations. Never enter real credentials
-or sensitive metadata. Records exist only in memory and reset on navigation/reload;
-only the newest 100 are kept. The old plaintext browser store is removed on mount
-when browser storage permissions allow it.
+Next.js application deployed on Vercel with Supabase email/password authentication.
+Every workspace route verifies the user on the server and checks an active,
+administrator-assigned database role. Direct URLs do not bypass authentication.
+
+**Vault operations still use samples.** Encryption, approvals, rotation and audit
+event lists are simulations. Do not enter real vault secrets or sensitive metadata.
+
+Follow [SUPABASE_AUTH_SETUP.md](SUPABASE_AUTH_SETUP.md) to configure the two Vercel
+variables, run the role-table migration, create users and assign their roles.
+Missing configuration, unavailable Supabase or missing membership denies access.
 
 ```sh
 npm ci
 npm run dev
 npm run test:security
-npx eslint src scripts tests
+npx eslint src scripts tests next.config.ts
 npm run build
+npm start
 ```
 
-Deploy only the `out/` produced by `npm run build`. Its final step adds per-document
-hash-based script CSP and a no-referrer policy to every HTML page. Running
-`next build` directly skips this hardening. Development does not have this CSP.
-System fonts avoid a remote font download at build time. `npm start` is not a
-static file server. By default, serve `out/` at the domain root (`/`).
-The GitHub Pages workflow sets `GITHUB_PAGES=true` to use the repository subfolder
-`/Centralized-Secrets-Encryption-Management-Dashboard/` instead.
+Deployment requires a server. `vercel.json` selects Next.js, not static hosting.
+There is no `out/` output or GitHub Pages deployment. The app runs at the domain
+root. Legacy repository-prefixed URLs redirect to root-level counterparts.
+Proxy applies a per-request nonce CSP and private/no-store response headers.
 
-## Vercel deployment (no Supabase required for the demo)
-
-The committed `vercel.json` selects the static hosting preset, runs `npm run build`
-including CSP hardening, and publishes `out/`. Keep the Vercel project Root Directory
-at the repository root, where `package.json` and `vercel.json` live. Do not set
-`GITHUB_PAGES=true` in Vercel. Push these changes to the connected branch to deploy
-them; redeploying an older commit will not include the fix.
-Vercel's `VERCEL=1` flag takes precedence over the GitHub Pages setting so its
-builds always use `/`. Old repository-prefixed URLs redirect to the equivalent
-root-level pages, preserving existing bookmarks.
-
-The home page and `/login/`, `/team-lead/`, `/developer/`, `/security-analyst/`,
-`/provision-secret/`, and `/secrets-directory/` work with sample data and no Supabase
-variables. If Vercel still returns its own `404 NOT_FOUND`, check that the production
-domain points to the successful deployment of this repository and branch.
-
-When a server backend is added, replace this static hosting configuration and
-export-only CSP step with Next.js server deployment and response security headers.
-
-See [SECURITY_APPLIED_PRINCIPLES.md](SECURITY_APPLIED_PRINCIPLES.md) for findings,
-verification, risk estimates, and the outstanding production architecture work.
-Older coursework documents and ZIP snapshots describe the insecure prototype;
-they are historical material, not evidence of working security controls. Do not
-redeploy those snapshots. Any real credentials ever entered into an older version
-must be rotated at their issuer; deleting browser data does not revoke them.
+See [SECURITY_APPLIED_PRINCIPLES.md](SECURITY_APPLIED_PRINCIPLES.md) for the original
+audit and the authentication update. Historical coursework, ZIPs and static
+exports describe older versions; do not redeploy them. Revoke any live credentials
+that were entered into an older plaintext-storage version.

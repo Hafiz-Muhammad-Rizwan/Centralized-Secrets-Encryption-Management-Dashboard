@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { signOut } from "@/app/login/actions";
 import { motion, useReducedMotion } from "motion/react";
 import {
   Activity,
@@ -1178,7 +1178,6 @@ function OverviewContent({ role, content, onAction, onNavigate }: {
 
 export default function RoleWorkspace({ role, initialTab = "Overview" }: { role: WorkspaceRole; initialTab?: string }) {
   const content = roleContent[role];
-  const router = useRouter();
   const reduceMotion = useReducedMotion();
   const [active, setActive] = useState(initialTab);
   const [secrets, setSecrets] = useState<SecretRecord[]>(() => loadSecrets());
@@ -1187,10 +1186,13 @@ export default function RoleWorkspace({ role, initialTab = "Overview" }: { role:
   const [showModal, setShowModal] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  const handleLogout = () => {
-    setSecrets(loadSecrets());
-    setShowLogoutModal(false);
-    router.push("/login");
+  const handleLogout = async () => {
+    try {
+      const result = await signOut();
+      if (result?.error) triggerToast(result.error);
+    } catch {
+      triggerToast("Sign-out could not complete. Please try again.");
+    }
   };
 
   const triggerToast = (msg?: string) => {

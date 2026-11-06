@@ -1,13 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "export",
+  // Authentication requires a server; do not restore static export or a basePath.
   trailingSlash: true,
-  // Only GitHub Pages needs the repository subfolder. Vercel serves at /.
-  basePath: process.env.GITHUB_PAGES === "true" && process.env.VERCEL !== "1"
-    ? "/Centralized-Secrets-Encryption-Management-Dashboard"
-    : "",
   images: { unoptimized: true },
+  experimental: { serverActions: { bodySizeLimit: "16kb" } },
 };
 
 export default nextConfig;

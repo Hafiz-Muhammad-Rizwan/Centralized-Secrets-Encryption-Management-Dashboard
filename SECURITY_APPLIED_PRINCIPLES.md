@@ -1,3 +1,31 @@
+# Authentication update — 2026-11-06
+
+This update supersedes the original audit's statements about public routes and
+absent authentication. The historical audit is retained below for traceability.
+
+- `src/app/login/actions.ts`: Supabase password verification, generic errors,
+  bounded credentials, role lookup before navigation, current-session sign-out.
+- `src/lib/auth/access.ts`: every protected page calls `requireRole`; `getUser`
+  verifies identity and a fresh `workspace_members` query decides access. Missing
+  configuration, missing membership, disabled accounts, and lookup failures deny.
+- `supabase/migrations/202611060001_workspace_members.sql`: own-row SELECT RLS;
+  no user write privileges or self-assigned roles. Migration must be applied.
+- `src/lib/supabase/server.ts` and `src/proxy.ts`: server-only auth cookies,
+  HttpOnly/Secure/SameSite flags, refresh propagation, non-cacheable responses,
+  request-specific CSP nonces and response anti-framing headers.
+- Vercel now uses server Next.js; static export and GitHub Pages publication are
+  removed from the build/deployment path. Retire any old public deployments.
+
+No claim of full production-vault readiness is made. MFA, durable audit logging,
+real secret encryption/storage and workflow authorization remain outstanding.
+Provider and edge login rate limits must be configured; no distributed application
+rate limiter is claimed. Session refresh revocation is not instant invalidation
+of every already-issued access token. Existing FMEA/WSES estimates below have not
+been re-scored for the new auth architecture or measured against a live project.
+See [setup and verification instructions](SUPABASE_AUTH_SETUP.md).
+
+---
+
 # Security Applied Principles — Vaultline
 
 Audit date: 2026-11-06 (Asia/Karachi). Scope: working-tree application and deployment configuration. This is a source review and demo containment exercise, not a penetration test, compliance certification, or production approval.
