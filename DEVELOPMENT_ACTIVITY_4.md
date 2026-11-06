@@ -1,3 +1,5 @@
+> Historical coursework: security claims below describe a simulation, not enforced controls. See [the current security audit](SECURITY_APPLIED_PRINCIPLES.md).
+
 # Development Activity 4 — Dependency Mapping and Failure Analysis
 
 **Semester Project:** Centralized Secrets Encryption Management Dashboard (Vaultline)  

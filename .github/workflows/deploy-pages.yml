@@ -7,8 +7,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:   
   group: pages
@@ -27,6 +25,10 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Security regression checks
+        run: npm run test:security
+      - name: Lint application
+        run: npx eslint src scripts tests
       - name: Build static export
         run: npm run build
       - name: Upload artifact
@@ -35,6 +37,10 @@ jobs:
           path: ./out
 
   deploy:
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

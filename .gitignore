@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local credentials and private key material
+.aws/
+*.key
+*.p12
+*.pfx

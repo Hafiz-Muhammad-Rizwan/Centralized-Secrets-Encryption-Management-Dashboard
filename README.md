@@ -1,34 +1,30 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Vaultline public UI demo
 
-## Getting Started
+This is a Next.js static export for GitHub Pages. It is **not a secrets manager**:
+all role routes are public, payloads are fixed sample text, and approval, rotation,
+lease, encryption, and audit controls are simulations. Never enter real credentials
+or sensitive metadata. Records exist only in memory and reset on navigation/reload;
+only the newest 100 are kept. The old plaintext browser store is removed on mount
+when browser storage permissions allow it.
 
-First, run the development server:
-
-```bash
+```sh
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run test:security
+npx eslint src scripts tests
+npm run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Deploy only the `out/` produced by `npm run build`. Its final step adds per-document
+hash-based script CSP and a no-referrer policy to every HTML page. Running
+`next build` directly skips this hardening. Development does not have this CSP.
+System fonts avoid a remote font download at build time. `npm start` is not a
+static file server; serve `out/` under the configured production base path:
+`/Centralized-Secrets-Encryption-Management-Dashboard/`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See [SECURITY_APPLIED_PRINCIPLES.md](SECURITY_APPLIED_PRINCIPLES.md) for findings,
+verification, risk estimates, and the outstanding production architecture work.
+Older coursework documents and ZIP snapshots describe the insecure prototype;
+they are historical material, not evidence of working security controls. Do not
+redeploy those snapshots. Any real credentials ever entered into an older version
+must be rotated at their issuer; deleting browser data does not revoke them.

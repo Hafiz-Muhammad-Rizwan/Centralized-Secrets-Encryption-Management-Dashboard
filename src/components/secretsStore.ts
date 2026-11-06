@@ -25,10 +25,10 @@ export const INITIAL_SECRETS: SecretRecord[] = [
     lastRotated: "3 days ago",
     accessCount: 14,
     rotationPolicy: "30 Days",
-    algorithm: "AES-256-GCM",
-    fingerprint: "sha256:4b91cf8e901a523e981aa71912ec081b3d5c90712a1",
+    algorithm: "None — demo data",
+    fingerprint: "Not computed — demo data",
     maskedValue: "••••••••••••••••",
-    plainValue: "sk_live_948194819a8fbc8d01192",
+    plainValue: "DEMO_ONLY_NOT_A_CREDENTIAL",
     createdAt: "2026-09-15",
   },
   {
@@ -40,10 +40,10 @@ export const INITIAL_SECRETS: SecretRecord[] = [
     lastRotated: "7 days ago",
     accessCount: 8,
     rotationPolicy: "60 Days",
-    algorithm: "AES-256-GCM",
-    fingerprint: "sha256:1a82e99bfca33789012cdfa10984ba0174aa88231c9",
+    algorithm: "None — demo data",
+    fingerprint: "Not computed — demo data",
     maskedValue: "••••••••••••••••",
-    plainValue: "whsec_78912301984abcdef901234",
+    plainValue: "DEMO_ONLY_NOT_A_CREDENTIAL",
     createdAt: "2026-09-20",
   },
   {
@@ -55,10 +55,10 @@ export const INITIAL_SECRETS: SecretRecord[] = [
     lastRotated: "14 days ago",
     accessCount: 5,
     rotationPolicy: "90 Days",
-    algorithm: "AES-256-GCM",
-    fingerprint: "sha256:88902cdbf10928aee90104bc12309851abb89210982",
+    algorithm: "None — demo data",
+    fingerprint: "Not computed — demo data",
     maskedValue: "••••••••••••••••",
-    plainValue: "postgres://readonly_usr:Xk99!2aZ09@orders-db.internal:5432/orders",
+    plainValue: "DEMO_ONLY_NOT_A_CREDENTIAL",
     createdAt: "2026-09-01",
   },
   {
@@ -70,10 +70,10 @@ export const INITIAL_SECRETS: SecretRecord[] = [
     lastRotated: "1 day ago",
     accessCount: 3,
     rotationPolicy: "30 Days",
-    algorithm: "RSA-4096 / AES-GCM",
-    fingerprint: "sha256:7789a01be182390192eabfa09182309192837bc9910",
+    algorithm: "None — demo data",
+    fingerprint: "Not computed — demo data",
     maskedValue: "••••••••••••••••",
-    plainValue: "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA09x1...\n-----END RSA PRIVATE KEY-----",
+    plainValue: "DEMO_ONLY_NOT_A_CREDENTIAL",
     createdAt: "2026-10-01",
   },
   {
@@ -85,10 +85,10 @@ export const INITIAL_SECRETS: SecretRecord[] = [
     lastRotated: "21 days ago",
     accessCount: 15,
     rotationPolicy: "30 Days",
-    algorithm: "AES-256-GCM",
-    fingerprint: "sha256:5519ab00129cf8901928abceef901238910293847aa",
+    algorithm: "None — demo data",
+    fingerprint: "Not computed — demo data",
     maskedValue: "••••••••••••••••",
-    plainValue: "auth_redis_cluster_pw#2026!Prod",
+    plainValue: "DEMO_ONLY_NOT_A_CREDENTIAL",
     createdAt: "2026-08-25",
   },
   {
@@ -100,10 +100,10 @@ export const INITIAL_SECRETS: SecretRecord[] = [
     lastRotated: "5 days ago",
     accessCount: 7,
     rotationPolicy: "60 Days",
-    algorithm: "AES-256-GCM",
-    fingerprint: "sha256:3901aa7728bc901a182746bcde0918234891029384b",
+    algorithm: "None — demo data",
+    fingerprint: "Not computed — demo data",
     maskedValue: "••••••••••••••••",
-    plainValue: "AKIAIOSFODNN7EXAMPLE",
+    plainValue: "DEMO_ONLY_NOT_A_CREDENTIAL",
     createdAt: "2026-09-28",
   },
   {
@@ -115,38 +115,25 @@ export const INITIAL_SECRETS: SecretRecord[] = [
     lastRotated: "10 days ago",
     accessCount: 2,
     rotationPolicy: "90 Days",
-    algorithm: "AES-256-GCM",
-    fingerprint: "sha256:99014ab882109847129384019283748291039485710",
+    algorithm: "None — demo data",
+    fingerprint: "Not computed — demo data",
     maskedValue: "••••••••••••••••",
-    plainValue: "dd_api_key_889012309182309182390",
+    plainValue: "DEMO_ONLY_NOT_A_CREDENTIAL",
     createdAt: "2026-09-18",
   },
 ];
 
-const STORAGE_KEY = "vaultline_secrets_records_v1";
-
+// Demo records are fresh per workspace mount. Never read or persist user payloads.
 export function loadSecrets(): SecretRecord[] {
-  if (typeof window === "undefined") {
-    return INITIAL_SECRETS;
-  }
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_SECRETS));
-      return INITIAL_SECRETS;
-    }
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_SECRETS;
-  } catch {
-    return INITIAL_SECRETS;
-  }
+  return INITIAL_SECRETS.map((record) => ({ ...record }));
 }
 
-export function saveSecrets(secrets: SecretRecord[]): void {
-  if (typeof window === "undefined") return;
+// Delete only this app's legacy plaintext store; do not touch other apps' data.
+export function clearLegacySecrets(): boolean {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(secrets));
-  } catch (e) {
-    console.error("Failed to persist secrets to localStorage", e);
+    localStorage.removeItem("vaultline_secrets_records_v1");
+    return true;
+  } catch {
+    return false;
   }
 }
