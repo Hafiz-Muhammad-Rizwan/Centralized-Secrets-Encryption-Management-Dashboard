@@ -9,6 +9,7 @@ export async function proxy(request: NextRequest) {
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
     "style-src 'self' 'unsafe-inline'", "img-src 'self' data:", "font-src 'self'",
     "connect-src 'self'", "object-src 'none'", "base-uri 'none'",
+    "report-uri /api/csp-report/", "report-to csp",
     "form-action 'self'", "frame-ancestors 'none'", "frame-src 'none'",
     ...(process.env.NODE_ENV === "production" ? ["upgrade-insecure-requests"] : []),
   ].join("; ");
@@ -38,8 +39,16 @@ export async function proxy(request: NextRequest) {
   response.headers.set("Referrer-Policy", "no-referrer");
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");
+  response.headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  response.headers.set("Cross-Origin-Resource-Policy", "same-origin");
+  // A fixed configured origin avoids constructing report destinations from Host.
+  try {
+    const origin = new URL(process.env.APP_ORIGIN ?? "");
+    if (origin.protocol === "https:" && !origin.username && !origin.password && origin.pathname === "/" && !origin.search && !origin.hash)
+      response.headers.set("Reporting-Endpoints", `csp="${origin.origin}/api/csp-report/"`);
+  } catch { /* report-uri remains available without APP_ORIGIN. */ }
   response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
-  if (process.env.NODE_ENV === "production") response.headers.set("Strict-Transport-Security", "max-age=31536000");
+  if (process.env.NODE_ENV === "production") response.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
   return response;
 }
 

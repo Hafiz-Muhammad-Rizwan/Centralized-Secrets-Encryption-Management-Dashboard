@@ -18,8 +18,9 @@ function moduleAt(path, imports = {}, env = {}) {
 }
 const policy = moduleAt('src/lib/auth/policy.ts');
 const redirect = (path) => { throw Error(`redirect:${path}`); };
-function authModule({ user = { id: 'verified', user_metadata: { role: 'team_lead' } }, member = null, userError = null, memberError = null, offline = false, aal = 'aal2', claimsError = null, subject = 'verified' } = {}) {
+function authModule({ user = { id: 'verified', user_metadata: { role: 'team_lead' } }, member = null, userError = null, memberError = null, offline = false, aal = 'aal2', claimsError = null, subject = 'verified', approved = true, sessionAllowed = true, securityEnabled = false } = {}) {
   const client = {
+    rpc: async name => ({ data: name === 'check_mfa_approval' ? approved : sessionAllowed, error: null }),
     auth: { async getUser() { if (offline) throw Error('offline'); return { data: { user }, error: userError }; }, async getClaims() { return { data: { claims: { sub: subject, aal } }, error: claimsError }; } },
     from(table) {
       assert.equal(table, 'workspace_members');
@@ -34,7 +35,7 @@ function authModule({ user = { id: 'verified', user_metadata: { role: 'team_lead
     '@/lib/supabase/server': { createAuthClient: async () => client },
     './policy': policy,
     '@/lib/security/audit': { audit() {} },
-  });
+  }, { SECURITY_DATA_ENABLED: securityEnabled ? 'true' : 'false' });
 }
 
 test('no identity, forged metadata, missing role, disabled role, DB errors and outages deny access', async () => {
@@ -110,6 +111,7 @@ test('login redirects only after verified credentials and an active database ass
       '@/lib/auth/policy': policy,
       '@/lib/auth/access': { currentAccess: async () => member?.active ? { role: member.role, userId: 'verified', mfaVerified: true } : null },
       '@/lib/security/rate-limit': { allowAttempt: async () => true },
+    '@/lib/security/client-address': { clientAddress: async () => null },
       '@/lib/security/audit': { audit() {} },
     });
     const form = new FormData(); form.set('email', 'user@example.com'); form.set('password', 'test');
@@ -130,5 +132,14 @@ test('a password-only session cannot enter any protected role even with a valid 
     const auth = authModule({ member: { role, active: true }, aal: 'aal1' });
     assert.equal((await auth.currentAccess()).mfaVerified, false);
     await assert.rejects(auth.requireRole(role), { message: 'redirect:/mfa/' });
+  }
+});
+
+
+test('AAL2 alone cannot bypass factor approval or enabled session revocation', async () => {
+  for (const settings of [{ approved: false }, { sessionAllowed: false, securityEnabled: true }]) {
+    const auth = authModule({ member: { role: 'developer', active: true }, ...settings });
+    assert.equal(await auth.currentAccess(), null);
+    await assert.rejects(auth.requireRole('developer'), /redirect:\/login/);
   }
 });

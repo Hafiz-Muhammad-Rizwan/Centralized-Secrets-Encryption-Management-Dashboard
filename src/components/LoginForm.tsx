@@ -35,7 +35,7 @@ export default function LoginForm({ configured }: { configured: boolean }) {
         <div className="visual-copy">
           <div className="eyebrow"><span className="eyebrow-line" />Private by design</div>
           <h1>Access should be<br /><em>intentional.</em></h1>
-          <p>One secure control plane for every secret, lease, and decision across your cloud.</p>
+          <p>Sign in to your assigned workspace and configured vault.</p>
         </div>
         <div className="visual-footer">
           <span><ShieldCheck size={15} /> Authenticated workspace</span>
@@ -80,11 +80,12 @@ export default function LoginForm({ configured }: { configured: boolean }) {
             </button>
           </form>
 
+          <p><a href="/account/recover/">Forgot your password?</a></p>
           <div className="login-security">
             <div><ShieldCheck size={16} /></div>
             <span>Password verified by Supabase.<br />Workspace access checked on the server.</span>
           </div>
-          <p className="login-admin">Accounts and roles are assigned by your administrator. <a href="mailto:security@acme.cloud">Contact security</a></p>
+          <p className="login-admin">Accounts and roles are assigned by your administrator. Contact your organization’s administrator for support.</p>
         </div>
       </motion.section>
     </motion.main>

@@ -14,16 +14,24 @@ export async function currentAccess(existingClient?: Awaited<ReturnType<typeof c
     if (claimsError || !verified || verified.claims.sub !== user.id) return null;
     const { data, error: memberError } = await client.from("workspace_members")
       .select("role, active").eq("user_id", user.id).maybeSingle();
-    if (memberError) { audit("auth_unavailable", user.id); return null; }
+    if (memberError) { await audit("auth_unavailable", user.id); return null; }
     const role = assignedRole(data);
-    if (!role) { audit("access_denied", user.id); return null; }
+    if (!role) { await audit("access_denied", user.id); return null; }
+    if (verified.claims.aal === "aal2") {
+      const { data: factorApproved, error: approvalError } = await client.rpc("check_mfa_approval");
+      if (approvalError || factorApproved !== true) return null;
+    }
+    if (process.env.SECURITY_DATA_ENABLED === "true") {
+      const { data: sessionAllowed, error: sessionError } = await client.rpc("check_workspace_session");
+      if (sessionError || sessionAllowed !== true) return null;
+    }
     return {
       role, userId: user.id, email: user.email ?? "Workspace member",
       mfaVerified: verified.claims.aal === "aal2",
       factors: (user.factors ?? []).filter(f => f.status === "verified").map(f => ({ id: f.id, type: f.factor_type })),
     };
   } catch {
-    audit("auth_unavailable");
+    await audit("auth_unavailable");
     return null;
   }
 }
@@ -33,7 +41,7 @@ export async function requireRole(expected: Role) {
   if (!access) redirect("/login/?reason=access");
   if (!access.mfaVerified) redirect("/mfa/");
   if (access.role !== expected) {
-    audit("access_denied", access.userId);
+    await audit("access_denied", access.userId);
     redirect(ROLE_PATHS[access.role]);
   }
   return access;

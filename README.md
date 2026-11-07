@@ -1,36 +1,44 @@
-# Vaultline authenticated workspace
+# Vaultline
 
-Next.js application deployed on Vercel with Supabase email/password authentication.
-Every workspace route verifies the user and MFA assurance on the server and checks an active,
-administrator-assigned database role. Direct URLs do not bypass authentication.
+Next.js server application with Supabase password/TOTP authentication, approved
+MFA enrollment, role checks, and a server-side encrypted vault. The original role
+dashboards remain explicitly labelled simulations; they are separate from real
+`/vault/`, `/account/` and `/audit/` pages.
 
-**Vault operations still use samples.** Encryption, approvals, rotation and audit
-event lists are simulations. Do not enter real vault secrets or sensitive metadata.
+**New code is not a deployed or certified production vault.** Follow
+[VAULT_OPERATIONS.md](VAULT_OPERATIONS.md) before deploying. Apply the new migration
+first: workspace access now checks approved MFA factors. Existing verified factors
+are preserved by the migration; new factors require administrator-issued one-time
+authorization after identity verification.
 
-Follow [SUPABASE_AUTH_SETUP.md](SUPABASE_AUTH_SETUP.md) to configure the two Vercel
-variables, run the role-table migration, create users and assign their roles.
-Missing configuration, unavailable Supabase or missing membership denies access.
+The owner-selected encryption design uses built-in Node.js AES-256-GCM and a
+server-only `ENCRYPTION_KEY` environment variable, with a fresh wrapped data key per
+secret. No AWS/KMS subscription is used. Key backups and restricted environment
+access are essential; this is not HSM-backed encryption. Real storage is disabled
+unless `SECURITY_DATA_ENABLED=true` and `VAULT_ENABLED=true` are configured.
 
 ```sh
 npm ci
 npm run dev
 npm run test:security
-npx eslint src scripts tests next.config.ts
+npx tsc --noEmit
+npm run lint
 npm run build
 npm start
 ```
 
-Deployment requires a server. `vercel.json` selects Next.js, not static hosting.
-There is no `out/` output or GitHub Pages deployment. The app runs at the domain
-root. Legacy repository-prefixed URLs redirect to root-level counterparts.
-Proxy applies a per-request nonce CSP and private/no-store response headers.
+CI additionally runs isolated PostgreSQL authorization tests, scans dependencies,
+and produces an SBOM. Do not execute `tests/sql/` against a live project.
 
-See [SECURITY_APPLIED_PRINCIPLES.md](SECURITY_APPLIED_PRINCIPLES.md) for the original
-audit and the authentication update. Historical coursework, ZIPs and static
-exports describe older versions; do not redeploy them. Revoke any live credentials
-that were entered into an older plaintext-storage version.
+Vercel runs the Next.js server at the domain root; static export is unsupported.
+Old `out/` directories/ZIPs may still exist locally or in history and must not be
+redeployed. Replacing the build workflow did **not** remove an already-published
+GitHub Pages site. Use the manual **Retire legacy GitHub Pages** workflow or
+repository Settings → Pages, then verify the old URL and nested routes are gone.
+Live retirement has not been performed by this implementation.
 
-Password login is followed by mandatory authenticator verification at `/mfa/`.
-Review the security-hardening rollout section of the setup guide before deployment.
-Optional shared Redis throttling and structured security logs are implemented;
-shared rate limits and durable log retention require deployment configuration.
+See [REMEDIATION_SUMMARY.md](REMEDIATION_SUMMARY.md) for V-01–V-13 status and verification,
+[VAULT_OPERATIONS.md](VAULT_OPERATIONS.md) for migration/environment/recovery details,
+and [SUPABASE_AUTH_SETUP.md](SUPABASE_AUTH_SETUP.md) for the original account setup.
+The historical assessment remains in `SYSTEM_FLAWS_AND_VULNERABILITIES_REPORT.md`;
+it is point-in-time evidence, not a statement about the newly implemented code.

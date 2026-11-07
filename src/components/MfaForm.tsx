@@ -10,6 +10,7 @@ export default function MfaForm({ factors, hasOtherFactor }: { factors: string[]
   const [state, verify, pending] = useActionState(verifyAuthenticator, { error: "" });
   const [working, startTransition] = useTransition();
   const [factorId, setFactorId] = useState(factors[0] ?? "");
+  const [bootstrapToken, setBootstrapToken] = useState("");
   const [error, setError] = useState("");
   return (
     <main className="login-form-side" style={{ minHeight: "85vh" }}>
@@ -17,10 +18,15 @@ export default function MfaForm({ factors, hasOtherFactor }: { factors: string[]
         <h1>Verify your identity</h1>
         <p>Use an authenticator app to complete sign-in. A password alone cannot open a workspace.</p>
         <p>Your app generates codes on your device; no email or text message is needed. Set up your own authenticator and never share its setup key or codes.</p>
+        {!factorId && !hasOtherFactor && <label>Administrator enrollment token
+          <input type="password" autoComplete="off" maxLength={64} value={bootstrapToken} onChange={e => setBootstrapToken(e.target.value)} />
+          <small>Obtain this one-time token after your administrator verifies your identity.</small>
+        </label>}
         {!factorId && !hasOtherFactor && <button className="primary-button login-button" disabled={working} onClick={() => startTransition(async () => {
           try {
-            const result = await enrollAuthenticator();
+            const result = await enrollAuthenticator(bootstrapToken);
             setEnrollment(result);
+            setBootstrapToken("");
             if (result.factorId) setFactorId(result.factorId);
           } catch { setError("Unable to set up your authenticator. Please try again."); }
         })}>{working ? "Preparing…" : "Set up authenticator"}</button>}
