@@ -9,13 +9,14 @@ export async function proxy(request: NextRequest) {
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
     "style-src 'self' 'unsafe-inline'", "img-src 'self' data:", "font-src 'self'",
     "connect-src 'self'", "object-src 'none'", "base-uri 'none'",
-    "form-action 'self'", "frame-ancestors 'none'",
+    "form-action 'self'", "frame-ancestors 'none'", "frame-src 'none'",
+    ...(process.env.NODE_ENV === "production" ? ["upgrade-insecure-requests"] : []),
   ].join("; ");
   request.headers.set("x-nonce", nonce);
   request.headers.set("Content-Security-Policy", policy);
   let response = NextResponse.next({ request: { headers: request.headers } });
   const config = supabaseConfig();
-  if (config) {
+  if (config && request.cookies.getAll().some(cookie => cookie.name.startsWith("sb-"))) {
     const client = createServerClient(config.url, config.key, {
       global: { fetch: authFetch },
       cookieOptions: sessionCookieOptions,
@@ -37,6 +38,8 @@ export async function proxy(request: NextRequest) {
   response.headers.set("Referrer-Policy", "no-referrer");
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");
+  response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
+  if (process.env.NODE_ENV === "production") response.headers.set("Strict-Transport-Security", "max-age=31536000");
   return response;
 }
 

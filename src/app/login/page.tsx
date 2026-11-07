@@ -6,6 +6,6 @@ import { supabaseConfig } from "@/lib/supabase/config";
 
 export default async function LoginPage() {
   const access = await currentAccess();
-  if (access) redirect(ROLE_PATHS[access.role]);
+  if (access) redirect(access.mfaVerified ? ROLE_PATHS[access.role] : "/mfa/");
   return <LoginForm configured={Boolean(supabaseConfig())} />;
 }

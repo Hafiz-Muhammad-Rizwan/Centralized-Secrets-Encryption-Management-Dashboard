@@ -1,7 +1,7 @@
 # Vaultline authenticated workspace
 
 Next.js application deployed on Vercel with Supabase email/password authentication.
-Every workspace route verifies the user on the server and checks an active,
+Every workspace route verifies the user and MFA assurance on the server and checks an active,
 administrator-assigned database role. Direct URLs do not bypass authentication.
 
 **Vault operations still use samples.** Encryption, approvals, rotation and audit
@@ -29,3 +29,8 @@ See [SECURITY_APPLIED_PRINCIPLES.md](SECURITY_APPLIED_PRINCIPLES.md) for the ori
 audit and the authentication update. Historical coursework, ZIPs and static
 exports describe older versions; do not redeploy them. Revoke any live credentials
 that were entered into an older plaintext-storage version.
+
+Password login is followed by mandatory authenticator verification at `/mfa/`.
+Review the security-hardening rollout section of the setup guide before deployment.
+Optional shared Redis throttling and structured security logs are implemented;
+shared rate limits and durable log retention require deployment configuration.

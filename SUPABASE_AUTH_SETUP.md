@@ -100,7 +100,8 @@ old static artifacts cannot provide the new authentication boundary.
 
 1. Open `/team-lead/` while signed out: expect a redirect to `/login/`.
 2. Enter an incorrect password: expect a generic error and no workspace access.
-3. Sign in with a confirmed, active developer account: expect `/developer/`.
+3. Sign in with a confirmed, active developer account: complete authenticator
+   enrollment/verification at `/mfa/`, then expect `/developer/`.
 4. Open `/team-lead/` or `/provision-secret/` as that developer: expect a redirect
    to `/developer/`, not the team-lead view.
 5. Sign out, then reload a protected URL: expect `/login/`.
@@ -116,8 +117,9 @@ provide framework origin checks; no custom cross-origin login endpoint exists.
 Sign-out revokes the current Supabase refresh session and clears its cookies;
 other devices are intentionally unaffected. Supabase access-token revocation
 semantics still apply: a copied access token may remain valid until expiry. Do
-not describe this as instant revocation of all stolen tokens. MFA, enterprise
-session controls, CAPTCHA and vault encryption are outside this implementation.
+not describe this as instant revocation of all stolen tokens. TOTP MFA is required
+for workspace access. Enterprise session controls, CAPTCHA and vault encryption
+remain outside this implementation.
 
 ## Validation limits
 
@@ -130,11 +132,98 @@ project, this migration and actual accounts; they have not been claimed as teste
 ### Local verification completed
 
 - `npm run build`: passed with all application routes dynamically rendered.
-- `npm run test:security`: 8 tests passed (including retained demo regression tests).
+- `npm run test:security`: 18 tests passed (including retained demo regression tests).
 - Application/scripts/tests/config ESLint and `git diff --check`: passed.
 - Production server: all five workspace URLs redirected anonymous requests to
   login; `/` redirected to login; email/password form returned HTTP 200 with
   non-cacheable responses and a nonce-based CSP.
 - Browser: login form rendered and Show/Hide Password interacted successfully
   under the production CSP. With missing environment values, sign-in is disabled.
-- Live Supabase account login, SQL execution and deployment are still pending.
+- Password login is reported working by the owner. Live TOTP enrollment/recovery,
+  SQL/RLS verification and deployment of these changes remain unverified here.
+
+## Security-hardening rollout (mandatory MFA)
+
+Supabase's [TOTP MFA API](https://supabase.com/docs/guides/auth/auth-mfa/totp)
+is free to use (verified 2026-11-07). Codes are generated locally in each user's
+authenticator app, without email or SMS delivery. Other hosting/usage limits still
+apply. Each account needs its own authenticator; do not share a code per role.
+A fixed second password is not MFA because both credentials are knowledge factors
+([NIST explanation](https://www.nist.gov/blogs/cybersecurity-insights/back-basics-whats-multi-factor-authentication-and-why-should-i-care)).
+
+The latest review requires **AAL2** for every workspace. Password sign-in now takes
+users to `/mfa/`; users without a factor click **Set up authenticator**, scan the
+QR code in their authenticator app and verify its six-digit code. Existing TOTP
+users enter their code. After verification they reach their assigned workspace.
+The header now shows the verified account email instead of fictional sample names.
+
+Before deploying, confirm in Supabase Authentication that TOTP enrollment and
+verification are enabled. Keep the existing two Supabase environment variables and
+membership table. No extra SQL migration or privileged Supabase API key is needed.
+Test with a designated account first, including enrollment, returning-user login,
+wrong code, wrong-role URL, sign-out and an inactive membership. Coordinate the MFA
+change with existing users; do not deploy without a recovery owner available.
+
+The app cannot remove a verified authenticator with only a password. If a user
+loses their device, an administrator must verify their identity outside this app
+before recovering their factor through Supabase's administrative facilities. Do
+not delete other users' factors or disable verification merely to bypass errors.
+Only the enrolling owner's *unverified* TOTP attempts can be replaced by the setup
+action. Administrators should pre-provision/verify identity carefully: stolen
+passwords before first enrollment remain a bootstrap risk.
+
+### Shared rate limiting (recommended before wider access)
+
+Supabase's own Auth rate limits remain essential, including for requests made
+directly to Supabase. The application now also limits password attempts, TOTP
+checks and enrollment. Without shared configuration its counters are bounded
+**per-process** only and reset with serverless instances; they are not distributed
+protection. To use the atomic shared implementation, configure an Upstash-compatible
+Redis REST database and add both server-only Vercel variables:
+
+| Variable | Value |
+| --- | --- |
+| `SECURITY_REDIS_REST_URL` | Your Redis HTTPS REST endpoint |
+| `SECURITY_REDIS_REST_TOKEN` | Its REST token permitted to execute the limiter's EVAL/INCR/PEXPIRE commands |
+
+Do not prefix these with `NEXT_PUBLIC_`. Do not use the read-only Redis token.
+Counters use SHA-256 identities, not raw emails; these hashes are pseudonyms,
+not encrypted personal data. If either variable is set but the other is absent,
+or if the configured service is unavailable, auth attempts fail closed. Configure
+and test both together before enabling in production. Existing signed-in page
+reads do not require Redis. The fixed limits are 10 attempts/account/15 minutes,
+100 password attempts total/minute, 10 MFA checks/user/5 minutes and 3 enrollments/
+user/15 minutes. These are small-workspace defaults, not capacity guarantees.
+
+Set appropriate Vercel edge/firewall limits as well. Application counters cannot
+prevent request floods from reaching the function, and account/global limits can
+be exhausted by an attacker to temporarily disrupt legitimate sign-in.
+
+### Security logs
+
+Security events are emitted as JSON server logs with `type: security`, a unique
+ID, timestamp, event name and optionally verified user UUID. Passwords, emails,
+tokens, MFA codes/seeds and raw error bodies are excluded. Configure export,
+restricted access, retention and alerting outside the app. These logs are not
+immutable and are not yet wired to the sample audit-trail table in the UI.
+
+### Configuration and database permission checks
+
+The app accepts publishable keys and legacy `anon` JWT keys only; secret keys and
+legacy `service_role` keys are rejected. Legacy payload inspection is only a
+configuration check, not JWT authentication: Supabase validates the API key.
+Service URLs must be HTTPS origins with no credentials, path, query or fragment.
+Use the canonical Supabase/Redis endpoints: credential-bearing requests reject
+redirects. No additional Supabase key is needed for these changes.
+
+Run `supabase/checks/workspace_permissions.sql` in the Supabase SQL Editor as the
+project administrator. This is a read-only inspection, not a migration. All checks
+in its first result should be true. Its second result should contain only the
+authenticated own-row SELECT policy. If the editor displays only the last result,
+run the two SELECT statements separately. Review any extra policies or failed checks
+before rollout; do not automatically broaden permissions to fix a login error.
+
+The script has not been executed against your database here. Even if its catalog
+checks pass, verify with two real user sessions that neither can read another
+user's assignment or change their own role. Also test disabled membership. These
+checks cover the membership table only, not other project tables, views or functions.
