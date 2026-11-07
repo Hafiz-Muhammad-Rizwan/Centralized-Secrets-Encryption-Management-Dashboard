@@ -1,0 +1,7 @@
+# Historical static demos and coursework archives must not enter server deployments.
+*.zip
+out/
+# Administrative procedures and fixtures are not runtime inputs.
+supabase/admin/
+tests/
+.github/

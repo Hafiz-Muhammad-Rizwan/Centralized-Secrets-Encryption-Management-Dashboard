@@ -1,5 +1,13 @@
 # Enable real password login
 
+> **Superseded rollout guidance:** The V-01–V-13 remediation adds a required MFA
+> approval migration, server-side vault, environment-held encryption key, account
+> recovery/session controls and Redis outage fallback. Follow `VAULT_OPERATIONS.md`
+> and `REMEDIATION_SUMMARY.md` for the current release. The remaining sections below
+> describe the preceding authentication-only review; older test counts, missing
+> vault statements and fail-closed Redis policy are historical.
+
+
 This version uses Next.js on Vercel, not a static export. Authentication and route
 roles are real; the vault payloads, approvals, rotation and event lists still use
 sample data. No real secret storage has been implemented.

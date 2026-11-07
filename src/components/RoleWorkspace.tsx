@@ -13,7 +13,6 @@ import {
   ClipboardCheck,
   Clock,
   Eye,
-  Fingerprint,
   FileKey2,
   Globe,
   Hash,
@@ -29,15 +28,11 @@ import {
   Settings2,
   Shield,
   ShieldCheck,
-  ShieldOff,
   Users,
   UsersRound,
   X,
   Zap,
 } from "lucide-react";
-import SecretProvisioningModule from "./SecretProvisioningModule";
-import SecretsDirectoryModule from "./SecretsDirectoryModule";
-import { loadSecrets, SecretRecord } from "./secretsStore";
 import type { LucideIcon } from "lucide-react";
 
 export type WorkspaceRole = "Team Lead" | "Developer" | "Security Analyst";
@@ -89,8 +84,8 @@ const roleContent = {
     metrics: [
       ["Events today", "1,284", "+12% vs yesterday"],
       ["Anomalies", "02", "1 needs review"],
-      ["Open incidents", "01", "Kill switch ready"],
-      ["Audit coverage", "100%", "All workspaces"],
+      ["Open incidents", "01", "Simulated response only"],
+      ["Audit coverage", "100%", "Sample workspaces"],
     ],
     rows: [
       ["Production request without ticket", "Hafiz Khan", "HIGH", "8 minutes ago", "10.24.8.12", "alert"],
@@ -155,7 +150,7 @@ function ApprovalQueuePage({ onAction }: { onAction: () => void }) {
   ];
 
   return (
-    <div className="sub-page">
+    <div className="sub-page"><span className="simulation-badge">SIMULATED / DEMO ONLY</span>
       <div className="sub-page-header">
         <div className="eyebrow"><span className="eyebrow-line" />Approval queue</div>
         <h2>Requests needing your decision</h2>
@@ -234,7 +229,7 @@ function RotationSchedulesPage() {
   ];
 
   return (
-    <div className="sub-page">
+    <div className="sub-page"><span className="simulation-badge">SIMULATED / DEMO ONLY</span>
       <div className="sub-page-header">
         <div className="eyebrow"><span className="eyebrow-line" />Rotation schedules</div>
         <h2>Secret rotation management</h2>
@@ -298,7 +293,7 @@ function TeamDirectoryPage() {
   ];
 
   return (
-    <div className="sub-page">
+    <div className="sub-page"><span className="simulation-badge">SIMULATED / DEMO ONLY</span>
       <div className="sub-page-header">
         <div className="eyebrow"><span className="eyebrow-line" />Team directory</div>
         <h2>Your team members</h2>
@@ -351,7 +346,7 @@ function MyActiveLeasesPage({ onAction }: { onAction: () => void }) {
   ];
 
   return (
-    <div className="sub-page">
+    <div className="sub-page"><span className="simulation-badge">SIMULATED / DEMO ONLY</span>
       <div className="sub-page-header">
         <div className="eyebrow"><span className="eyebrow-line" />Active leases</div>
         <h2>Your active secret leases</h2>
@@ -407,7 +402,7 @@ function MyActiveLeasesPage({ onAction }: { onAction: () => void }) {
 
 function RequestAccessPage({ onSubmit }: { onSubmit: () => void }) {
   return (
-    <div className="sub-page">
+    <div className="sub-page"><span className="simulation-badge">SIMULATED / DEMO ONLY</span>
       <div className="sub-page-header">
         <div className="eyebrow"><span className="eyebrow-line" />Request access</div>
         <h2>Request secret access</h2>
@@ -469,7 +464,7 @@ function RequestHistoryPage() {
   ];
 
   return (
-    <div className="sub-page">
+    <div className="sub-page"><span className="simulation-badge">SIMULATED / DEMO ONLY</span>
       <div className="sub-page-header">
         <div className="eyebrow"><span className="eyebrow-line" />Request history</div>
         <h2>Your access request history</h2>
@@ -525,7 +520,7 @@ function RequestHistoryPage() {
 
 function SecurityPosturePage() {
   return (
-    <div className="sub-page">
+    <div className="sub-page"><span className="simulation-badge">SIMULATED / DEMO ONLY</span>
       <div className="sub-page-header">
         <div className="eyebrow"><span className="eyebrow-line" />Security posture</div>
         <h2>Your security health</h2>
@@ -542,7 +537,7 @@ function SecurityPosturePage() {
         <div className="stat-card blue-accent">
           <div className="stat-label">MFA status</div>
           <div className="stat-value" style={{ color: "var(--blue)" }}>Active</div>
-          <div className="stat-sub">Hardware key enrolled</div>
+          <div className="stat-sub">TOTP sign-in; hardware keys not implemented</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Last audit</div>
@@ -556,33 +551,33 @@ function SecurityPosturePage() {
           <div className="setting-icon emerald"><ShieldCheck size={20} /></div>
           <div className="setting-body">
             <strong>Multi-factor authentication</strong>
-            <span>FIDO2 hardware key enrolled and active</span>
+            <span>FIDO2 hardware keys are not implemented; real sign-in uses TOTP</span>
           </div>
-          <div className="setting-action"><div className="toggle on" /></div>
+          <div className="setting-action"><span className="simulation-badge">Not implemented</span></div>
         </div>
         <div className="setting-card">
           <div className="setting-icon emerald"><Lock size={20} /></div>
           <div className="setting-body">
-            <strong>Zero plaintext exposure</strong>
-            <span>No secrets stored in plaintext anywhere</span>
+            <strong>Plaintext handling</strong>
+            <span>Authorized reveals deliver plaintext to the browser; zero exposure is not claimed</span>
           </div>
-          <div className="setting-action"><div className="toggle on" /></div>
+          <div className="setting-action"><span className="simulation-badge">Not implemented</span></div>
         </div>
         <div className="setting-card">
           <div className="setting-icon emerald"><Activity size={20} /></div>
           <div className="setting-body">
             <strong>Audit logging</strong>
-            <span>All access events are continuously logged</span>
+            <span>This demo panel does not collect events; use Recorded audit events</span>
           </div>
-          <div className="setting-action"><div className="toggle on" /></div>
+          <div className="setting-action"><span className="simulation-badge">Not implemented</span></div>
         </div>
         <div className="setting-card">
           <div className="setting-icon emerald"><RefreshCw size={20} /></div>
           <div className="setting-body">
             <strong>Auto-revocation</strong>
-            <span>Leases automatically expire and revoke</span>
+            <span>Demo leases do not enforce access; server vault grants have enforced expiry</span>
           </div>
-          <div className="setting-action"><div className="toggle on" /></div>
+          <div className="setting-action"><span className="simulation-badge">Not implemented</span></div>
         </div>
         <div className="setting-card">
           <div className="setting-icon amber"><AlertTriangle size={20} /></div>
@@ -601,92 +596,6 @@ function SecurityPosturePage() {
 
 /* ═══════════════════════════════════════════════════════════════
    SUB-PAGE: SECURITY ANALYST — AUDIT TRAIL
-   ═══════════════════════════════════════════════════════════════ */
-
-function AuditTrailPage() {
-  const events = [
-    { action: "Secret revealed", user: "Maya Chen", resource: "payments-prod", ip: "10.24.8.12", time: "2 minutes ago", color: "blue" as const, icon: Eye },
-    { action: "Lease approved", user: "Hafiz Khan", resource: "github-app-private-key", ip: "10.24.3.8", time: "8 minutes ago", color: "green" as const, icon: Check },
-    { action: "Access request submitted", user: "Noah Williams", resource: "redis-cache-prod", ip: "10.24.5.14", time: "15 minutes ago", color: "purple" as const, icon: Plus },
-    { action: "Secret rotated", user: "System", resource: "orders-db-readonly", ip: "10.24.1.1", time: "27 minutes ago", color: "amber" as const, icon: RefreshCw },
-    { action: "Lease revoked (expired)", user: "System", resource: "stripe-webhook", ip: "10.24.1.1", time: "42 minutes ago", color: "red" as const, icon: X },
-    { action: "Failed reveal attempt", user: "svc-ci-runner", resource: "payments-prod", ip: "10.24.4.9", time: "1 hour ago", color: "red" as const, icon: AlertOctagon },
-    { action: "MFA challenge passed", user: "Priya Shah", resource: "Session auth", ip: "10.24.7.22", time: "1h 15m ago", color: "green" as const, icon: Fingerprint },
-    { action: "Secret viewed", user: "Jordan Davis", resource: "aws-deploy-key", ip: "10.24.7.31", time: "2h ago", color: "blue" as const, icon: Eye },
-    { action: "Rotation completed", user: "System", resource: "monitoring-api-token", ip: "10.24.1.1", time: "3h ago", color: "amber" as const, icon: RefreshCw },
-    { action: "Access denied", user: "Unknown", resource: "payments-prod", ip: "192.168.1.100", time: "4h ago", color: "red" as const, icon: ShieldOff },
-  ];
-
-  return (
-    <div className="sub-page">
-      <div className="sub-page-header">
-        <div className="eyebrow"><span className="eyebrow-line" />Audit trail</div>
-        <h2>Full access event log</h2>
-        <p>Every action is recorded, timestamped, and attributable.</p>
-      </div>
-
-      <div className="stats-row">
-        <div className="stat-card accent">
-          <div className="stat-label">Events today</div>
-          <div className="stat-value" style={{ color: "var(--emerald)" }}>1,284</div>
-          <div className="stat-sub">+12% vs yesterday</div>
-        </div>
-        <div className="stat-card blue-accent">
-          <div className="stat-label">Unique users</div>
-          <div className="stat-value" style={{ color: "var(--blue)" }}>8</div>
-          <div className="stat-sub">All team members active</div>
-        </div>
-        <div className="stat-card crimson-accent">
-          <div className="stat-label">Failed attempts</div>
-          <div className="stat-value" style={{ color: "var(--crimson)" }}>3</div>
-          <div className="stat-sub">2 investigated</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Coverage</div>
-          <div className="stat-value">100%</div>
-          <div className="stat-sub">All workspaces monitored</div>
-        </div>
-      </div>
-
-      <div className="action-bar">
-        <div className="action-bar-left">
-          <div className="search-input">
-            <Search size={15} />
-            <input placeholder="Search events, users, IPs..." />
-          </div>
-        </div>
-        <div className="action-bar-right">
-          <button className="filter-button active">All events</button>
-          <button className="filter-button">Reveals</button>
-          <button className="filter-button">Failures</button>
-        </div>
-      </div>
-
-      <div className="data-table">
-        <div className="timeline">
-          {events.map((e, i) => {
-            const Icon = e.icon;
-            return (
-              <div className="timeline-item" key={e.action + i}>
-                <div className={`timeline-icon ${e.color}`}>
-                  <Icon size={15} />
-                </div>
-                <div className="timeline-body">
-                  <strong>{e.action}</strong>
-                  <span>{e.user} · {e.resource} · {e.ip}</span>
-                </div>
-                <span className="timeline-time">{e.time}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   SUB-PAGE: SECURITY ANALYST — ANOMALY CENTER
    ═══════════════════════════════════════════════════════════════ */
 
 function AnomalyCenterPage({ onAction }: { onAction: () => void }) {
@@ -730,7 +639,7 @@ function AnomalyCenterPage({ onAction }: { onAction: () => void }) {
   ];
 
   return (
-    <div className="sub-page">
+    <div className="sub-page"><span className="simulation-badge">SIMULATED / DEMO ONLY</span>
       <div className="sub-page-header">
         <div className="eyebrow"><span className="eyebrow-line" />Anomaly center</div>
         <h2>Detected anomalies</h2>
@@ -793,7 +702,7 @@ function AnomalyCenterPage({ onAction }: { onAction: () => void }) {
 
 function KillSwitchPage({ onAction }: { onAction: () => void }) {
   return (
-    <div className="sub-page">
+    <div className="sub-page"><span className="simulation-badge">SIMULATED / DEMO ONLY</span>
       <div className="sub-page-header">
         <div className="eyebrow"><span className="eyebrow-line" />Emergency response</div>
         <h2>Kill switch</h2>
@@ -809,7 +718,7 @@ function KillSwitchPage({ onAction }: { onAction: () => void }) {
             </div>
           </button>
           <h3 style={{ fontSize: "18px", fontWeight: 600, letterSpacing: "-.5px", marginBottom: "8px" }}>Emergency Kill Switch</h3>
-          <p className="kill-switch-status">System status: <span style={{ color: "var(--emerald)" }}>All systems operational</span></p>
+          <p className="kill-switch-status">Simulated system status: <span style={{ color: "var(--emerald)" }}>Not connected to live monitoring</span></p>
           <div className="kill-switch-note">
             <AlertTriangle size={15} />
             <span>This action will immediately revoke all 24 active leases and lock the workspace. This cannot be undone.</span>
@@ -861,7 +770,7 @@ function IncidentHistoryPage() {
   ];
 
   return (
-    <div className="sub-page">
+    <div className="sub-page"><span className="simulation-badge">SIMULATED / DEMO ONLY</span>
       <div className="sub-page-header">
         <div className="eyebrow"><span className="eyebrow-line" />Incident history</div>
         <h2>Past security incidents</h2>
@@ -918,21 +827,21 @@ function IncidentHistoryPage() {
 
 function WorkspaceSettingsPage() {
   return (
-    <div className="sub-page">
+    <div className="sub-page"><span className="simulation-badge">SIMULATED / DEMO ONLY</span>
       <div className="sub-page-header">
         <div className="eyebrow"><span className="eyebrow-line" />Settings</div>
         <h2>Workspace settings</h2>
-        <p>Configure workspace-level security policies and preferences.</p>
+        <p>These example controls do not change server security policies.</p>
       </div>
 
       <div className="settings-grid">
         <div className="setting-card">
           <div className="setting-icon emerald"><Shield size={20} /></div>
           <div className="setting-body">
-            <strong>Enforce MFA for all members</strong>
-            <span>Require multi-factor authentication for workspace access</span>
+            <strong>MFA configuration example</strong>
+            <span>Real MFA is enforced on the server and cannot be disabled here</span>
           </div>
-          <div className="setting-action"><div className="toggle on" /></div>
+          <div className="setting-action"><span className="simulation-badge">Not implemented</span></div>
         </div>
         <div className="setting-card">
           <div className="setting-icon blue"><Clock size={20} /></div>
@@ -950,15 +859,15 @@ function WorkspaceSettingsPage() {
             <strong>Auto-rotation policy</strong>
             <span>Automatically rotate secrets on a defined schedule</span>
           </div>
-          <div className="setting-action"><div className="toggle on" /></div>
+          <div className="setting-action"><span className="simulation-badge">Not implemented</span></div>
         </div>
         <div className="setting-card">
           <div className="setting-icon purple"><Activity size={20} /></div>
           <div className="setting-body">
             <strong>Continuous audit logging</strong>
-            <span>Log every access event with full attribution and metadata</span>
+            <span>This demo control has no effect; database vault events are recorded separately</span>
           </div>
-          <div className="setting-action"><div className="toggle on" /></div>
+          <div className="setting-action"><span className="simulation-badge">Not implemented</span></div>
         </div>
         <div className="setting-card">
           <div className="setting-icon emerald"><Bell size={20} /></div>
@@ -966,15 +875,15 @@ function WorkspaceSettingsPage() {
             <strong>Anomaly notifications</strong>
             <span>Send alerts when unusual access patterns are detected</span>
           </div>
-          <div className="setting-action"><div className="toggle on" /></div>
+          <div className="setting-action"><span className="simulation-badge">Not implemented</span></div>
         </div>
         <div className="setting-card">
           <div className="setting-icon crimson"><Zap size={20} /></div>
           <div className="setting-body">
             <strong>Kill switch authorization</strong>
-            <span>Require two-person authorization for emergency kill switch</span>
+            <span>Two-person authorization is not implemented</span>
           </div>
-          <div className="setting-action"><div className="toggle on" /></div>
+          <div className="setting-action"><span className="simulation-badge">Not implemented</span></div>
         </div>
       </div>
     </div>
@@ -1162,10 +1071,10 @@ function OverviewContent({ role, content, onAction, onNavigate }: {
             <span className="spark-icon"><ShieldCheck size={16} /></span>
             <div>
               <span className="eyebrow">Control plane status</span>
-              <h2>Zero plaintext exposure across your workspace.</h2>
+              <h2>Plaintext handling across your workspace.</h2>
             </div>
           </div>
-          <span><span className="live-dot" /> All systems operational</span>
+          <span><span className="live-dot" /> Not connected to live monitoring</span>
         </div>
       </div>
     </>
@@ -1180,8 +1089,7 @@ export default function RoleWorkspace({ role, identity, initialTab = "Overview" 
   const content = roleContent[role];
   const reduceMotion = useReducedMotion();
   const [active, setActive] = useState(initialTab);
-  const [secrets, setSecrets] = useState<SecretRecord[]>(() => loadSecrets());
-  const [toastMessage, setToastMessage] = useState<string>("The workspace has been updated.");
+  const [toastMessage, setToastMessage] = useState<string>("Simulation updated; no server-side security action was performed.");
   const [showToast, setShowToast] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -1197,7 +1105,7 @@ export default function RoleWorkspace({ role, identity, initialTab = "Overview" 
 
   const triggerToast = (msg?: string) => {
     if (msg) setToastMessage(msg);
-    else setToastMessage("The workspace has been updated.");
+    else setToastMessage("Simulation updated; no server-side security action was performed.");
     setShowToast(true);
     setTimeout(() => setShowToast(false), 3500);
   };
@@ -1214,41 +1122,10 @@ export default function RoleWorkspace({ role, identity, initialTab = "Overview" 
 
   /* Render the active sub-page */
   function renderPage() {
-    /* Activity 3 Modules */
-    if (active === "Provision Secret") {
-      return (
-        <SecretProvisioningModule
-          onSecretAdded={(newSecret) => {
-            setSecrets((prev) => {
-              const updated = [newSecret, ...prev].slice(0, 100);
-              return updated;
-            });
-          }}
-          onNavigateToDirectory={() => setActive("Secrets Directory")}
-          onTriggerToast={(msg) => triggerToast(msg)}
-        />
-      );
+    if (["Provision Secret", "Secrets Directory", "Secrets inventory"].includes(active)) {
+      return <div className="sub-page"><span className="simulation-badge">SIMULATED / DEMO ONLY</span><h2>Server-side vault</h2><p>Encrypted storage and access grants are managed separately from the demonstration screens.</p><a href="/vault/">Open vault</a></div>;
     }
-
-    if (active === "Secrets Directory" || active === "Secrets inventory") {
-      return (
-        <SecretsDirectoryModule
-          secrets={secrets}
-          onRotateSecret={(id) => {
-            setSecrets((prev) => {
-              const updated = prev.map((s) =>
-                s.id === id
-                  ? { ...s, lastRotated: "Just now", accessCount: s.accessCount + 1 }
-                  : s
-              );
-              return updated;
-            });
-          }}
-          onNavigateToProvision={() => setActive("Provision Secret")}
-          onTriggerToast={(msg) => triggerToast(msg)}
-        />
-      );
-    }
+    if (active === "Audit trail") return <div className="sub-page"><span className="simulation-badge">SIMULATED / DEMO ONLY</span><h2>Recorded audit events</h2><a href="/audit/">Open database audit events</a></div>;
 
     /* Settings (shared) */
     if (active === "Workspace settings") return <WorkspaceSettingsPage />;
@@ -1257,21 +1134,6 @@ export default function RoleWorkspace({ role, identity, initialTab = "Overview" 
     if (role === "Team Lead") {
       switch (active) {
         case "Approval queue": return <ApprovalQueuePage onAction={() => triggerToast()} />;
-        case "Secrets inventory": return (
-          <SecretsDirectoryModule
-            secrets={secrets}
-            onRotateSecret={(id) => {
-              setSecrets((prev) => {
-                const updated = prev.map((s) =>
-                  s.id === id ? { ...s, lastRotated: "Just now", accessCount: s.accessCount + 1 } : s
-                );
-                return updated;
-              });
-            }}
-            onNavigateToProvision={() => setActive("Provision Secret")}
-            onTriggerToast={(msg) => triggerToast(msg)}
-          />
-        );
         case "Rotation schedules": return <RotationSchedulesPage />;
         case "Team directory": return <TeamDirectoryPage />;
       }
@@ -1290,7 +1152,6 @@ export default function RoleWorkspace({ role, identity, initialTab = "Overview" 
     /* Security Analyst pages */
     if (role === "Security Analyst") {
       switch (active) {
-        case "Audit trail": return <AuditTrailPage />;
         case "Anomaly center": return <AnomalyCenterPage onAction={() => triggerToast()} />;
         case "Kill switch": return <KillSwitchPage onAction={() => triggerToast()} />;
         case "Incident history": return <IncidentHistoryPage />;
@@ -1356,7 +1217,7 @@ export default function RoleWorkspace({ role, identity, initialTab = "Overview" 
           <div className="status-icon"><ShieldCheck size={15} /></div>
           <div>
             <strong>Shield is active</strong>
-            <span>All systems operational</span>
+            <span>Not connected to live monitoring</span>
           </div>
           <span className="pulse" />
         </div>

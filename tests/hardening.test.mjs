@@ -18,10 +18,10 @@ function load(path, imports = {}, env = {}, extras = {}) {
 }
 const factorId = '12345678-1234-1234-1234-123456789abc';
 const redirect = path => { throw Error(`redirect:${path}`); };
-function mfa({ active = true, foreign = false, verified = false, upgrade = true, limited = false, error = false } = {}) {
+function mfa({ active = true, foreign = false, verified = false, upgrade = true, limited = false, error = false, bootstrap = true } = {}) {
   let verifyCalls = 0; let enrollCalls = 0; let unenrollCalls = 0;
   const member = { userId: 'owner', role: 'developer', mfaVerified: verified, factors: verified ? [{ id: factorId, type: 'totp' }] : [] };
-  const client = { auth: {
+  const client = { rpc: async () => ({ data: bootstrap, error: null }), auth: {
     getUser: async () => ({ data: { user: { id: 'owner', factors: foreign ? [] : [{ id: factorId, factor_type: 'totp', status: verified ? 'verified' : 'unverified' }] } }, error: null }),
     mfa: {
       challengeAndVerify: async () => { verifyCalls++; member.mfaVerified = upgrade; return { error: error ? Error('provider private info') : null }; },
@@ -57,14 +57,14 @@ test('MFA accepts only an upgraded verified session; provider errors remain gene
   }
 });
 test('password-only requests cannot remove or replace an existing verified factor', async () => {
-  for (const settings of [{ verified: true }, { active: false }, { limited: true }]) {
+  for (const settings of [{ verified: true }, { active: false }, { limited: true }, { bootstrap: false }]) {
     const { actions, calls } = mfa(settings);
-    assert.match((await actions.enrollAuthenticator()).error, /Unable/);
+    assert.match((await actions.enrollAuthenticator('a'.repeat(64))).error, /Unable/);
     assert.equal(calls().enrollCalls, 0);
     assert.equal(calls().unenrollCalls, 0);
   }
   const { actions, calls } = mfa();
-  assert.equal((await actions.enrollAuthenticator()).factorId, factorId);
+  assert.equal((await actions.enrollAuthenticator('a'.repeat(64))).factorId, factorId);
   assert.equal(calls().unenrollCalls, 1);
 });
 test('local rate buckets enforce counts and expire', async () => {
@@ -76,7 +76,7 @@ test('local rate buckets enforce counts and expire', async () => {
   now = 1101;
   assert.equal(await rate.allowAttempt('login', 'person', 2, 100), true);
 });
-test('configured shared rate limiting fails closed on errors and sends an atomic expiry command', async () => {
+test('shared rate limiting keeps known denials closed and bounds outage fallback', async () => {
   const env = { SECURITY_REDIS_REST_URL: 'https://redis.example.com', SECURITY_REDIS_REST_TOKEN: 'private-token' };
   for (const result of [{ result: 1 }, { result: 3 }, { error: 'bad command' }]) {
     const rate = load('src/lib/security/rate-limit.ts', {}, env, { fetch: async (_url, options) => {
@@ -89,6 +89,8 @@ test('configured shared rate limiting fails closed on errors and sends an atomic
     assert.equal(await rate.allowAttempt('login', 'person@example.com', 2, 100), result.result === 1);
   }
   const failed = load('src/lib/security/rate-limit.ts', {}, env, { fetch: async () => { throw Error('offline'); } });
+  assert.equal(await failed.allowAttempt('login', 'person', 2, 100), true);
+  assert.equal(await failed.allowAttempt('login', 'person', 2, 100), true);
   assert.equal(await failed.allowAttempt('login', 'person', 2, 100), false);
   assert.equal(await load('src/lib/security/rate-limit.ts', {}, { SECURITY_REDIS_REST_TOKEN: 'only' }).allowAttempt('login', 'person', 2, 100), false);
   for (const url of ['http://redis.example.com', 'https://user:pass@redis.example.com', 'https://redis.example.com/unexpected', 'https://redis.example.com/?token=x']) {
@@ -131,6 +133,7 @@ test('login stops before the auth provider when throttled and sends AAL1 session
       '@/lib/auth/policy': { credentials: () => ({ email: 'user@example.com', password: 'not-logged' }), ROLE_PATHS: { developer: '/developer/' } },
       '@/lib/security/audit': { audit() {} },
       '@/lib/security/rate-limit': { allowAttempt: async () => !limited },
+      '@/lib/security/client-address': { clientAddress: async () => null },
     });
     if (limited) {
       assert.match((await actions.signIn({}, new FormData())).error, /Unable to sign in/);
@@ -140,4 +143,23 @@ test('login stops before the auth provider when throttled and sends AAL1 session
       assert.equal(providerCalls, 1);
     }
   }
+});
+
+test('audit exporter sends only allowlisted fields, prevents redirects and reports delivery failure', async () => {
+  const entries = [], warnings = []; let requests = 0;
+  const logger = load('src/lib/security/audit.ts', {}, { SECURITY_AUDIT_SINK_URL: 'https://logs.example.com/append', SECURITY_AUDIT_SINK_TOKEN: 'test-only-token' }, {
+    console: { info: text => entries.push(JSON.parse(text)), warn: text => warnings.push(JSON.parse(text)) },
+    fetch: async (_url, options) => {
+      requests++;
+      assert.equal(options.redirect, 'error');
+      const body=JSON.parse(options.body);
+      assert.deepEqual(Object.keys(body).sort(), ['actor','at','event','id','type']);
+      assert.equal(options.headers['Idempotency-Key'],body.id);
+      return { ok:false };
+    },
+  });
+  await logger.audit('password_changed','test-user');
+  assert.equal(requests,1); assert.equal(entries.length,1);
+  assert.equal(warnings[0].event,'audit_export_failed');
+  assert.ok(!JSON.stringify(warnings).includes('test-only-token'));
 });

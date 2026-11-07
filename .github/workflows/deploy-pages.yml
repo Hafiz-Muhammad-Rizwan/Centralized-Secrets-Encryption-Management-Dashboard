@@ -1,25 +1,24 @@
-name: Validate server application
-
+name: Retire legacy GitHub Pages
 on:
-  push:
-    branches: [main]
-  pull_request:
-
+  workflow_dispatch:
 permissions:
   contents: read
-
+  pages: write
 jobs:
-  validate:
+  retire:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm audit --audit-level=high --registry=https://registry.npmjs.org
-      - run: npm run test:security
-      - run: npx eslint src scripts tests next.config.ts
-      - run: npm run build
-# Deployment is handled by Vercel. GitHub Pages cannot run server-side auth.
+      - name: Delete the obsolete Pages site
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          status=$(curl --silent --show-error --output /tmp/pages-response --write-out '%{http_code}' \
+            --request DELETE --header "Authorization: Bearer $GH_TOKEN" \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/$REPOSITORY/pages")
+          case "$status" in
+            204|404) echo 'Pages site removed or already absent.' ;;
+            *) echo "Pages retirement failed (HTTP $status). Unpublish in repository Settings > Pages."; exit 1 ;;
+          esac

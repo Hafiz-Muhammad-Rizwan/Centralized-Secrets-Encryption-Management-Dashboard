@@ -1,0 +1,5 @@
+# Require code-owner review in repository branch protection settings.
+* @Hafiz-Muhammad-Rizwan
+/src/lib/ @Hafiz-Muhammad-Rizwan
+/supabase/ @Hafiz-Muhammad-Rizwan
+/.github/ @Hafiz-Muhammad-Rizwan

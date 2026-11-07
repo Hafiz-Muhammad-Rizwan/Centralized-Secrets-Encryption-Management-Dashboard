@@ -1,5 +1,13 @@
 # Security applied principles and production-readiness review
 
+> **Superseded rollout guidance:** The V-01–V-13 remediation adds a required MFA
+> approval migration, server-side vault, environment-held encryption key, account
+> recovery/session controls and Redis outage fallback. Follow `VAULT_OPERATIONS.md`
+> and `REMEDIATION_SUMMARY.md` for the current release. The remaining sections below
+> describe the preceding authentication-only review; older test counts, missing
+> vault statements and fail-closed Redis policy are historical.
+
+
 Date: 2026-11-07 (Asia/Karachi). Scope: current repository, server authentication,
 role authorization, deployment configuration and sample-vault UI. The user reports
 that live Supabase password login works. This review did not receive live database
