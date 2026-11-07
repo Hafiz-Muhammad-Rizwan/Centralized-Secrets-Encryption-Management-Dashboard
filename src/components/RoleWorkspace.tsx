@@ -1176,7 +1176,7 @@ function OverviewContent({ role, content, onAction, onNavigate }: {
    MAIN COMPONENT
    ═══════════════════════════════════════════════════════════════ */
 
-export default function RoleWorkspace({ role, initialTab = "Overview" }: { role: WorkspaceRole; initialTab?: string }) {
+export default function RoleWorkspace({ role, identity, initialTab = "Overview" }: { role: WorkspaceRole; identity: string; initialTab?: string }) {
   const content = roleContent[role];
   const reduceMotion = useReducedMotion();
   const [active, setActive] = useState(initialTab);
@@ -1363,10 +1363,10 @@ export default function RoleWorkspace({ role, initialTab = "Overview" }: { role:
 
         <div className="profile">
           <div className="profile-avatar">
-            {role === "Developer" ? "RZ" : role === "Team Lead" ? "HK" : "ZA"}
+            {identity.slice(0, 2).toUpperCase()}
           </div>
           <div>
-            <strong>{role === "Developer" ? "Rizwan" : role === "Team Lead" ? "Hafiz" : "Zaid"}</strong>
+            <strong>{identity}</strong>
             <span>{role}</span>
           </div>
         </div>
@@ -1452,7 +1452,7 @@ export default function RoleWorkspace({ role, initialTab = "Overview" }: { role:
             </div>
             <div className="modal-note logout-note">
               <LogOut size={16} />
-              <span>Signed in as <strong>{role === "Developer" ? "Rizwan" : role === "Team Lead" ? "Hafiz" : "Zaid"}</strong> · {role}</span>
+              <span>Signed in as <strong>{identity}</strong> · {role}</span>
             </div>
             <div className="logout-actions">
               <button className="secondary-button" onClick={() => setShowLogoutModal(false)}>

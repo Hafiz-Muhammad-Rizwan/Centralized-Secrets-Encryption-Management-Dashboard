@@ -18,6 +18,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm audit --audit-level=high --registry=https://registry.npmjs.org
       - run: npm run test:security
       - run: npx eslint src scripts tests next.config.ts
       - run: npm run build

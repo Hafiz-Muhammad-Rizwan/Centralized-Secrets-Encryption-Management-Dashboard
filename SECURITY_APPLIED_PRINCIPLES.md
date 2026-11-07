@@ -1,183 +1,278 @@
-# Authentication update — 2026-11-06
+# Security applied principles and production-readiness review
 
-This update supersedes the original audit's statements about public routes and
-absent authentication. The historical audit is retained below for traceability.
-
-- `src/app/login/actions.ts`: Supabase password verification, generic errors,
-  bounded credentials, role lookup before navigation, current-session sign-out.
-- `src/lib/auth/access.ts`: every protected page calls `requireRole`; `getUser`
-  verifies identity and a fresh `workspace_members` query decides access. Missing
-  configuration, missing membership, disabled accounts, and lookup failures deny.
-- `supabase/migrations/202611060001_workspace_members.sql`: own-row SELECT RLS;
-  no user write privileges or self-assigned roles. Migration must be applied.
-- `src/lib/supabase/server.ts` and `src/proxy.ts`: server-only auth cookies,
-  HttpOnly/Secure/SameSite flags, refresh propagation, non-cacheable responses,
-  request-specific CSP nonces and response anti-framing headers.
-- Vercel now uses server Next.js; static export and GitHub Pages publication are
-  removed from the build/deployment path. Retire any old public deployments.
-
-No claim of full production-vault readiness is made. MFA, durable audit logging,
-real secret encryption/storage and workflow authorization remain outstanding.
-Provider and edge login rate limits must be configured; no distributed application
-rate limiter is claimed. Session refresh revocation is not instant invalidation
-of every already-issued access token. Existing FMEA/WSES estimates below have not
-been re-scored for the new auth architecture or measured against a live project.
-See [setup and verification instructions](SUPABASE_AUTH_SETUP.md).
-
----
-
-# Security Applied Principles — Vaultline
-
-Audit date: 2026-11-06 (Asia/Karachi). Scope: working-tree application and deployment configuration. This is a source review and demo containment exercise, not a penetration test, compliance certification, or production approval.
+Date: 2026-11-07 (Asia/Karachi). Scope: current repository, server authentication,
+role authorization, deployment configuration and sample-vault UI. The user reports
+that live Supabase password login works. This review did not receive live database
+administrative access or test accounts and did not perform attack traffic against
+production. Findings below distinguish implemented code from deployed controls.
 
 ## 1. Executive summary
 
-The implementation is a public Next.js 16.3.7 / React static export deployed to GitHub Pages. There is no authentication server, database, vault, KMS, API, queue, or durable audit service. Previously, a hardcoded browser password selected a role; visiting a role URL bypassed it entirely. Arbitrary secret values were stored unencrypted in localStorage. Displayed AES, SHA-256, rotation, lease, and audit claims did not correspond to enforced controls.
+**This is not yet a production secrets manager.** It is an authenticated workspace
+with a sample-only vault. Secret values are fixed sample text; rotation, approvals,
+leases and the dashboard audit tables are simulations. No encrypted real-secret
+store or durable approval workflow exists. Implementing those is a separate backend
+project, not something an audit can truthfully certify by changing labels.
 
-The changes contain the public demonstration: remove credential collection, replace credential-shaped fixtures with explicit sample text, disallow editable payloads, eliminate browser persistence, attempt removal of the legacy store, bound demo record count, label simulated operations, handle clipboard denial, remove remote font dependencies, and apply CSP to exported HTML. They preserve role exploration, sample provisioning, search/filter, inspection, and simulated actions. They intentionally remove arbitrary secret entry and persistence because those features cannot safely exist in this architecture.
+Existing protections include Supabase password verification, administrator-managed
+roles, own-row membership RLS, server page guards, HttpOnly/Secure/SameSite cookies,
+CSRF-origin validation by Next Server Actions, generic login errors, per-request
+nonce CSP, non-cacheable authentication responses, and no plaintext secret writes.
 
-**Production acceptance: FAIL.** Real authentication, authorization, encryption and immutable logging remain unimplemented. It would be inaccurate to confirm that no unmitigated critical flaws remain for real secrets management. The result is a contained UI demo, not a hardened production vault.
+This review adds mandatory authenticator verification before workspace access,
+verified token assurance/subject checks, factor-ownership checks, safe enrollment
+and recovery boundaries, bounded attempt counters with optional shared Redis,
+structured redacted security events, stronger browser response headers, cancellation
+propagation for dependency calls, and verified-account identity in the UI. It also
+patches dependencies identified by npm audit. The build and adversarial tests are
+used to validate behavior; live rollout checks remain required.
 
-## 2. Discovery and trust boundaries
+**The requested statement “no unmitigated critical flaws remain” cannot be made for
+real secret management.** The sample-only restriction must stay until the production
+blockers in section 8 are addressed. No compliance certification is implied.
 
-Reviewed: all runtime files under `src/`, `next.config.ts`, package manifest/lock, TypeScript, ESLint and PostCSS configuration, `.gitignore`, deployment workflow, and the two coursework Markdown documents. Enumerated ZIP contents and scanned embedded source/JavaScript for legacy credential and persistence markers. Historical binary coursework artifacts/screenshots were not exhaustively inspected; repository history, installed dependency source, local operator credentials, and general design-prompt tooling were not comprehensively audited. No private operator configuration was printed.
+## 2. Inventory, data flows and attacker profiles
 
-| Asset / endpoint | Implementation | Trust and exposure |
+| Asset / entry point | Implementation | Trust boundary / sensitivity |
 | --- | --- | --- |
-| `/`, `/login/` | `src/app/page.tsx`, `src/app/login/page.tsx` | Public role selector; no identity claim |
-| `/team-lead/`, `/developer/`, `/security-analyst/` | Respective route pages and `RoleWorkspace.tsx` | Public samples; role comes from route, not verified identity |
-| `/provision-secret/`, `/secrets-directory/` | Route pages and shared modules | Public sample provisioning and directory |
-| `/_next/static/*`, exported HTML/RSC files | Next build output in `out/` | Public downloadable code and data; never a secret store |
-| Demo records | `src/components/secretsStore.ts` | Fixed sample payloads in JS memory; no database |
-| Browser localStorage (legacy) | `vaultline_secrets_records_v1` | Old plaintext records; deleted when permission permits, never loaded |
-| Clipboard | Browser API | Optional export of sample metadata; failure handled |
-| CI/build/deployment | `.github/workflows/deploy-pages.yml` | npm registry, GitHub Actions, Pages and deployment identity |
-| Historical archives | `Archive.zip`, `23F-3031 _ 23F-3014.zip` | Contain old source AND built chunks with credential/persistence markers; unchanged historical evidence |
+| `/`, `/login/` | Root redirect, login page, `signIn` Server Action | Public; passwords submitted only to server/Supabase, never logged |
+| `/mfa/` | MFA page; enroll/verify Server Actions | Password-authenticated and active member; seed returned only to enrolling owner |
+| `/team-lead/`, `/developer/`, `/security-analyst/` | Each page calls `requireRole` | Verified user + active membership + verified AAL2 + matching role |
+| `/provision-secret/`, `/secrets-directory/` | Both require `team_lead` | Same server controls; payloads still samples |
+| Sign-out Server Action | `src/app/login/actions.ts` | Revokes current refresh session; reports failures rather than claiming success |
+| Membership database | `public.workspace_members` | Own-row SELECT; no client INSERT/UPDATE/DELETE grants or policies |
+| Supabase Auth | Official SDK, server-only client | Identity, password verification, JWT signing/refresh and MFA factors |
+| Session cookies | Server/proxy adapters | HttpOnly; Secure in production; SameSite=Lax; never intentionally returned as action data |
+| Sample records and metadata | `secretsStore.ts` and UI state | Bounded working set, no durable real-secret data; do not enter private metadata |
+| Rate counters | Local bounded Map, or configured Redis REST | Account identities SHA-256 hashed in counter keys; predictable hashes are pseudonyms, not encryption |
+| Security events | Server stdout JSON | Event/UUID/time/verified actor only; NOT an immutable audit service |
+| Build chain / hosting | npm lockfile, GitHub Actions, Vercel | Trusted deployment code; TLS, firewall, log retention and redundancy administered externally |
+| Historical ZIPs/coursework | Existing repository artifacts | Old code/security claims retained; not a deployment source or security evidence |
 
-No SQL queries, API handlers, WebSocket listeners, external runtime API calls, `eval`, or `dangerouslySetInnerHTML` usage were found in the runtime source. Prepared statements and API BOLA checks therefore have no implementation point in this version. React text rendering provides normal escaping; this is not proof of immunity to all XSS.
+No runtime SQL string interpolation, custom SQL API, WebSockets, `eval`, or
+`dangerouslySetInnerHTML` was found. Supabase queries use SDK filters; MFA inputs
+are constrained before provider calls. Sample text rendering uses React escaping.
+This does not prove the absence of every XSS or supply-chain vulnerability.
 
 ```mermaid
 flowchart LR
-  Registry[npm registry] --> Build[CI build]
-  Build --> CSP[HTML hash CSP postprocessor]
-  CSP --> Pages[Public static host]
-  Pages --> Browser[Untrusted browser: public role UI]
-  Browser --> Memory[Fixed sample payloads / bounded memory]
-  Browser -. best effort delete .-> Legacy[Legacy plaintext localStorage]
-  Browser -. optional copy .-> Clipboard[OS clipboard]
+  Browser[Untrusted browser] -->|Password / code / session cookie| App[Next.js server and proxy]
+  App -->|getUser + verified claims| Auth[Supabase Auth]
+  App -->|user-scoped SDK query| Membership[Membership table + RLS]
+  App -->|optional atomic limit check| Redis[Shared rate store]
+  App -->|redacted structured event| Logs[Platform logs]
+  App -->|MFA + role allowed| UI[Sample-only workspace]
 ```
 
-Build infrastructure is trusted to produce code; every visitor controls their own browser. Client validation and read-only inputs are UX containment, **not server-side security boundaries**. A user can alter the local program, but there is no privileged remote resource to unlock. Metadata fields are still editable and must not contain sensitive information.
+Cybercriminals and automated scanners may guess passwords, reuse stolen sessions,
+or exploit framework advisories. Insiders may manipulate role/factor IDs or attempt
+unauthorized reveals. Hacktivists may attack availability or deface a compromised
+build. APTs may target dependencies, CI identity and operator accounts. No actual
+incident history or compromise was supplied; these are threat hypotheses.
 
-## 3. Applied security principles matrix
+## 3. Applied principles matrix
 
-| Principle / property | Concrete implementation | Boundary / residual |
-| --- | --- | --- |
-| Confidentiality / data minimization | `secretsStore.ts`: sample `plainValue`; `loadSecrets` clones fixtures. `SecretProvisioningModule.tsx`: read-only built-in sample, fixed payload assignment. Persistence removed from `RoleWorkspace.tsx`. | No AES at rest; no real payload storage supported. JS memory is readable to the visitor. |
-| Least privilege | Deployment workflow grants Pages write and OIDC token permission only to deploy job; build has contents read. | No application RBAC; public roles remain public. |
-| Defense in depth | `scripts/harden-export.mjs`: inline script hashes, same-origin assets/connections, no inline event handlers/eval, no objects/frames/base URL changes/form submissions; `DemoNotice.tsx` on every route. | Same-origin scripts are trusted; inline CSS remains allowed for existing styles/motion. |
-| Fail-secure behavior | Build fails if HTML cannot be hardened or no HTML exists; no legacy JSON parsing or fallback to stored user payloads. Cleanup failure is visible. | Demo operation continues with samples if storage deletion fails. Old browser data may remain. |
-| Integrity | SHA-256 hashes of exact inline script bytes in export CSP; fake SHA fingerprints replaced with explicit uncomputed status. | CSP hashes are not digital signatures or record integrity guarantees. Compromised build/host can replace both policy and code. |
-| Availability / graceful degradation | No runtime font service; system font fallback in `layout.tsx`. Clipboard rejection handled in both modules. Demo records capped at 100. | Static host and browser remain required. No rate limiting, DDoS guarantee, failover, or circuit breaker is claimed. |
-| Economy of mechanism / open design | Standard browser APIs, Node `crypto` for CSP hashes, `crypto.randomUUID` for sample IDs; no pretend encryption routines. | UUIDs are sample identifiers, not authorization tokens. |
-| Least common mechanism | No shared browser persistence, only per-mounted-workspace sample state; legacy cleanup deletes only this app's key. | Same-origin script/hosting isolation still depends on deployment. |
-| Accountability / honest security UI | `DemoNotice.tsx`, login copy, module copy and README identify simulations; old coursework prefaced with correction. | No immutable or authoritative audit logs. Static event tables cannot provide non-repudiation. |
-| Authentication / complete mediation / separation of privilege | Hardcoded password and password collection removed from `login/page.tsx`. | **Not implemented**: session checks, RBAC, per-object ownership, MFA, dual approval. Do not substitute client checks for these. |
-| Session protection / revocation | No claimed login session or JWT is issued; returning to role picker resets mounted demo state. | No HttpOnly cookies, expiry, JWT rotation or revocation. |
-| Secret hygiene | `.gitignore` excludes local AWS credentials and common private key formats. | Ignore rules do not erase history or revoke credentials. Archives remain exposed if repository is public. |
-
-## 4. STRIDE remediation and PASTA
-
-| ID | STRIDE | Attack / failure | Change and status |
+| Principle / property | Existing controls retained | Added / verified in this review | Limitation |
 | --- | --- | --- | --- |
-| S1 | Spoofing, elevation | Shared `123456` password; direct route access; prototype-key membership in account map | Removed fake login entirely. Real authorization remains a critical production gap. |
-| S2 | Information disclosure | Plaintext localStorage and credential-shaped fixture strings downloaded by anyone | Removed persistent reads/writes and replaced values with fixed sample; best-effort cleanup on every page. Previously exposed values require issuer rotation. |
-| S3 | Tampering, elevation | Forged localStorage records; uncontrolled shape and size | No storage deserialization; fresh fixtures; 100-record cap, identifier validation and 100-character service bound. |
-| S4 | Tampering, disclosure | No browser policy to constrain injected scripts or external sinks | Post-export script hashes and CSP constraints. No live browser exploit validation performed. |
-| S5 | Repudiation | Static audit rows, fake rotation/encryption and unverified approvals | Persistent simulation notice and corrected crypto copy. Authoritative audit, approval and rotation remain missing. |
-| S6 | Denial of service | Remote font build outage, browser quota/permission errors, unhandled clipboard rejection | Removed remote font imports and storage dependency; handle clipboard failure; cap records. |
-| S7 | Elevation | Build job unnecessarily had deployment token privileges | Privileges moved to deploy job only. Actions still use version tags; pinning reviewed commit SHAs remains recommended. |
+| Confidentiality | HttpOnly/Secure cookies, no real payload persistence, role guards | AAL2 required; MFA seed only returned during owner enrollment | No AES-256 real vault or KMS exists |
+| Integrity | Own-row RLS and SDK-bound query filters | Verified JWT subject must match verified user; factor ownership checked | Digital signatures/checksums are not substitutes for a future authenticated encryption design |
+| Availability | Generic errors, optional clipboard fallback, bounded sample list | Rate windows; configured Redis failures deny attempts; caller abort signals preserved | No infrastructure failover or DDoS guarantee; shared limiter must be configured |
+| Accountability | Supabase's provider-side auth facilities | `src/lib/security/audit.ts` and calls in login/MFA/access paths | stdout is not immutable; export and protect retention externally |
+| Authentication | Supabase verifies password; no local password hashing | `src/app/mfa/*`, `MfaForm.tsx`; password alone cannot enter workspaces | First-factor compromise before initial enrollment remains a bootstrap risk |
+| Least privilege | User-scoped SDK; no service key; read-only user membership | Existing verified MFA cannot be replaced through password-only enrollment | Administrative recovery must be restricted and identity-verified |
+| Defense in depth | CSP, cookie flags, RLS, page guards | MFA + attempt limits + frame restrictions + Permissions Policy + HSTS | Inline styles remain allowed; edge controls still needed |
+| Fail-secure defaults | Missing config/user/role and database failure deny | Invalid claims, insufficient AAL, factor mismatch and shared-limiter failures deny | Do not configure a security dependency as fail-open for uptime |
+| Economy of mechanism | Standard Next and Supabase libraries | Official MFA APIs; small allowlisted event schema; atomic Redis command | No custom password hashing or encryption invented |
+| Complete mediation | Every protected page revalidates server-side | MFA actions independently recheck identity, membership and factor ownership | Already-rendered sample state is not remotely erased; future data APIs need their own checks |
+| Open design | Standard auth libraries and reviewed configuration | Security rests on provider-verified tokens and TOTP, not hidden routes | Browser UI is never an authorization boundary |
+| Separation of privilege | Admin assigns role; user cannot edit it | Password + enrolled factor + active role required | Two-person secret approval is absent because the approval workflow is simulated |
+| Least common mechanism | Per-user cookies, scoped membership query, no shared browser store | Scoped MFA factors and hashed rate keys | Global login limit is intentionally shared; sustained abuse can throttle legitimate users |
 
-PASTA seven stages:
-1. Business objective: demonstrate role workflows without inviting credential disclosure; production objective would require confidential, attributable access to real secrets.
-2. Technical scope: public static pages, browser state, npm/CI and Pages. No backend exists.
-3. Decomposition: build-to-host and host-to-browser boundaries shown above; browser-to-clipboard is optional.
-4. Threat analysis: anonymous visitors download all data; XSS/extension or local users can inspect memory; malicious contributors can alter build artifacts.
-5. Vulnerability analysis: S1–S7, with historical copies and unverified deployment controls retained as residual risk.
-6. Attack modeling: direct role URL → inspect fixtures; submit real payload → read localStorage (removed path); alter stored JSON → render forged records (removed path); compromise dependency → alter public JavaScript (residual).
-7. Business impact: credential compromise would be severe; containment reduces accidental exposure but does not qualify the app to manage credentials. Production release is blocked until backend controls are implemented and adversarially tested.
+Relevant paths: `src/lib/auth/access.ts`, `src/app/login/actions.ts`,
+`src/app/mfa/actions.ts`, `src/lib/security/{audit,rate-limit}.ts`,
+`src/lib/supabase/{server,config}.ts`, `src/proxy.ts`, and
+`supabase/migrations/202611060001_workspace_members.sql`.
 
-### OCTAVE and attacker profiles
+## 4. STRIDE findings and remediation log
 
-Critical assets are real credentials users might mistakenly enter, CI deployment integrity, historical data, and user trust. Organizational priorities: prohibit real secret use, rotate any previously entered live credentials, review old published artifacts, assign a security owner, and define retention/incident response before production work.
+| ID | STRIDE | Concrete attacker path / finding | Resolution |
+| --- | --- | --- | --- |
+| F1 | Spoofing / elevation | Stolen password opens a valid member's workspace without a second factor | AAL2 enforced by every page guard; login sends AAL1 to MFA; signed claims checked against user ID |
+| F2 | Tampering / elevation | Submit another user's factor ID; replace existing MFA using only password | Explicit authenticated factor ownership/type checks; verified factors block enrollment replacement; only own unverified TOTP attempts may be cleared |
+| F3 | DoS / spoofing | Repeated password/code attempts through public actions | 10 login attempts/account/15 min; 100 total/min; 10 MFA attempts/user/5 min; 3 enrollments/user/15 min; optional Redis atomic windows |
+| F4 | Repudiation | No structured application events for auth failures or role denial | Allowlisted structured logs for login, sign-out, MFA, rate-limit and access events; log retention remains external |
+| F5 | Tampering / DoS | Vulnerable pinned Next version and transitive source-map package | Patch upgrade and repeat npm advisory scan; exploitability depends on enabled features |
+| F6 | Disclosure / spoofing | Dashboard displays fictional name as signed-in identity | Pass verified account email from guarded server pages and render it as escaped text |
+| F7 | Disclosure / DoS | Caller cancellation lost; unnecessary auth work on anonymous requests | Combine caller abort with per-fetch deadline; proxy avoids refresh work without auth cookies |
+| F8 | Disclosure / tampering | Frame embedding and unnecessary browser capabilities | CSP frame-src none, frame-ancestors none, Permissions-Policy, HSTS in production; existing nonce CSP preserved |
+| F9 | Disclosure / integrity | Users assume encryption/rotation/audit rows are real | Keep sample-only notice and fixed payloads; document production blockers; no fake security assertion |
+| F10 | Elevation / configuration error | Operator accidentally supplies a legacy privileged API key through the public configuration variable | Allow publishable keys or legacy anon role only; reject service_role, malformed keys and ambiguous endpoint URLs; provider still validates key signatures |
+| F11 | Disclosure / configuration error | Credential-bearing service calls follow unexpected redirects | Auth and Redis fetch reject redirects; configured service must be a canonical HTTPS origin |
 
-Cybercriminals could harvest stored credentials; hacktivists could deface or disrupt hosting; insiders could misuse real approvals if later connected; automated scanners can discover public routes and old bundles; APTs could compromise dependencies or CI for persistence. The demo change removes one harvest path, not these adversaries. No evidence of an actual incident was supplied.
+Follow-up least-privilege checks are in `supabase/checks/workspace_permissions.sql`.
+They inspect RLS flags, application-role bypass privileges, table/column grants and
+policy definitions without modifying the project. The script is prepared but has
+not been executed against the live database; it does not prove tenant isolation
+for unrelated tables, views or privileged functions. User-session tests remain
+required. No new policy or migration is applied automatically.
 
-## 5. Service dependency matrix and coupling
+TOTP remains per-user. A shared fixed role code would be another knowledge factor,
+not MFA, and would weaken revocation and attribution. The setup guide records the
+provider's free TOTP API and offline code generation; no email/SMS sender is needed.
 
-Rows are callers; columns are callees. `2` hard synchronous, `1` soft synchronous with failure handling, `1A` asynchronous decoupled, `0` absent. Browser promises alone are not durable queues. Local in-process component calls are distinguished from network services.
+The critical Next advisory GHSA-673q-mjm6-r5xr describes `use cache` typed-array
+returns; that specific code pattern was not found here. Patch anyway: dependency
+severity alone is not proof that this app was exploitable. The audit also identified
+Server Action DoS and source-map-js advisories. See the lockfile and final scan.
 
-| Before caller | Static host | Local sample data | localStorage | Remote fonts (build) | Clipboard | npm registry |
-| --- | --- | --- | --- | --- | --- | --- |
-| Build | 0 | 0 | 0 | 2 | 0 | 2 |
-| Browser UI | 2 | 2 | 1 | 0 | 0 | 0 |
-| Provision/directory | 0 | 2 | 1 | 0 | 2 | 0 |
+Development dependencies were also patched: zod is 4.6.7, and a narrowly scoped
+override pins typescript-estree's minimatch to 11.0.1. Remove that override when
+the upstream dependency range includes a patched version. Lint and build checks
+validate the current combination; this does not guarantee all future combinations.
 
-| After caller | Static host | Local sample data | localStorage | Remote fonts (build) | Clipboard | npm registry |
-| --- | --- | --- | --- | --- | --- | --- |
-| Build | 0 | 0 | 0 | 0 | 0 | 2 |
-| Browser UI | 2 | 2 | 1 (cleanup only) | 0 | 0 | 0 |
-| Provision/directory | 0 | 2 | 0 | 0 | 1 | 0 |
+## 5. PASTA and OCTAVE
 
-The old store was already soft in code (exceptions caught), although persistence correctness depended on it. This is not falsely reported as a `2 → 1` conversion. Actual changes: clipboard `2 → 1`, build fonts `2 → 0`, persistence `1 → 0`. No `1A` queue was introduced. Static host, build toolchain/registry, and browser are remaining single points of failure. Replication and CDN failover are hosting work, not implemented by a React refactor. A future vault must keep authentication, authorization, key access and durable auditing hard dependencies; falling back to allow-access would be unsafe.
+PASTA stages:
+1. Objectives: protect workspace identities now; real secret custody requires a
+   separate encrypted storage and approval design.
+2. Scope: public Next routes/actions, Supabase Auth and membership, cookies,
+   deployment pipeline, optional Redis and log destination.
+3. Decomposition: browser is untrusted; server verifies identity, token assurance,
+   member record and factor ownership before protected behavior.
+4. Threats: credential theft, direct URL access, role/factor tampering, password
+   spraying, log evasion, dependency compromise and service outage.
+5. Vulnerabilities: F1–F9 above; retained unknowns include live RLS, auth policy,
+   edge limits, backup quality, operator privileges and historical exposure.
+6. Attack modeling: test absent/forged user, mismatched JWT subject, inactive/unknown
+   role, AAL1 direct access, foreign MFA ID, failed verification, dependency errors
+   and shared-counter outage. Do not test live account lockouts without a test account.
+7. Impact: unauthorized real-secret access would be severe. Do not promote sample
+   workflows to production use until their backend controls exist and are tested.
 
-## 6. FMEA and WSES
+OCTAVE: critical assets are authentication sessions/MFA seeds, role assignments,
+deployment integrity and any mistakenly entered real secret. Organizational
+priorities are restricted admin recovery, provider-account MFA, rotating previously
+exposed credentials, retiring old deployments, log retention and tested restoration.
+Assign owners for identity recovery, infrastructure and future vault-key custody.
 
-These are review estimates, not measured incident probabilities or certified quantitative reductions. FMEA scales: 1–10; higher S means worse impact, O means more likely occurrence, D means harder detection. RPN = S×O×D. Post scores assume the supported sample-only demo, not hypothetical production use; severity is retained to avoid treating removal of a workflow as stronger cryptography.
+## 6. Dependency matrix and failure analysis
 
-| Failure mode | Before S/O/D | RPN | After S/O/D | RPN | Basis |
+Rows are callers, columns are callees. `2` hard synchronous; `1` optional synchronous
+with fallback; `1A` durable asynchronous decoupling; `0` absent. No queue is claimed.
+
+| Caller (before) | Auth | Membership DB | Rate store | Log sink | Clipboard |
 | --- | --- | --- | --- | --- | --- |
-| Real credential persistence/exposure | 10/7/8 | 560 | 10/2/3 | 60 | Fixed payload, no writes, warning; historical data still possible |
-| Mistaking public roles for authorization | 10/8/8 | 640 | 10/3/3 | 90 | No login claim, public-role notice; not RBAC |
-| Forged/unbounded saved records | 6/6/6 | 216 | 6/2/2 | 24 | Never read saved JSON, bounded working list |
-| Script injection impact | 8/4/7 | 224 | 8/3/5 | 120 | Export CSP; same-origin trust and no browser test remain |
-| Remote font outage | 4/5/3 | 60 | 4/1/2 | 8 | Dependency removed |
-| Clipboard denial | 3/5/5 | 75 | 3/5/2 | 30 | Failure visible; read/search still work |
-| False audit/rotation assurance | 9/7/8 | 504 | 9/3/3 | 81 | Simulation labeled, no durable control claimed |
-| Hardware/browser crash | 3/4/3 | 36 | 3/4/2 | 24 | Sample loss explicitly expected; no persistence guarantee |
-| Deployment misconfiguration / old ZIP redeployment | 9/4/7 | 252 | 9/4/5 | 180 | Workflow gates and documentation; archives remain |
+| Login | 2 | 2 | 0 | 0 | 0 |
+| Protected page | 2 | 2 | 0 | 0 | 0 |
+| Sample UI | 0 | 0 | 0 | 0 | 1 |
 
-If real secrets are used, S1/S2/S5 retain their high pre-fix risk; demo scores do not apply. Network drops can prevent asset loading; software bugs can stop rendering; configuration/human error can skip postprocessing or redeploy old snapshots. No backup/recovery test, failover drill or load test was performed.
-
-WSES = 2A + 3D + 2P + C; Low=1, Medium=3, High=5. Past incident history is **unknown**; P=3 is an explicit neutral planning assumption in every row, not a claim of medium incident frequency. Each total has ±4 uncertainty if actual P is 1 or 5.
-
-| Component | Before A/D/P/C | WSES | After A/D/P/C | WSES | Interpretation |
+| Caller (after) | Auth | Membership DB | Rate store | Log sink | Clipboard |
 | --- | --- | --- | --- | --- | --- |
-| Login/role UI | 5/5/3/1 | 32 | 5/1/3/1 | 20 | No password collection; public accessibility unchanged |
-| Provisioning/store | 5/5/3/3 | 34 | 5/1/3/3 | 22 | Only fixed sample payloads supported |
-| Directory/reveal | 5/5/3/3 | 34 | 5/1/3/3 | 22 | Data sensitivity reduced, not authorization improved |
-| CI/static hosting | 3/5/3/3 | 30 | 3/5/3/3 | 30 | Permissions improved; this coarse formula does not capture that |
-| Historical ZIPs | 5/5/3/3 | 34 | 5/5/3/3 | 34 | Contents/history not remediated; sensitivity conservatively high |
+| Login / MFA action | 2 | 2 | 2 when configured; otherwise local | 1 (stdout only) | 0 |
+| Protected page | 2 | 2 | 0 | 1 (stdout only) | 0 |
+| Sample UI | 0 | 0 | 0 | 0 | 1 |
 
-## 7. Residual risk and production prerequisites
+Auth/DB/hosting are security-critical single points of failure. No `2 → 1` reduction
+is justified for identity or authorization: a fallback granting access would violate
+fail-secure defaults. Existing clipboard fallback stays `1`. The optional shared
+limiter deliberately becomes hard when configured; partial configuration or outage
+must not silently switch to weaker local counters. A future real vault must make
+durable audit persistence part of the release-of-secret decision, not rely on stdout.
 
-The requested assertion of no remaining critical flaws cannot be supported. Before handling real credentials:
-- Replace static-only secret operations with a server API backed by an established identity provider/MFA, expiring HttpOnly/Secure/SameSite sessions, CSRF protection, logout revocation, and rate limits.
-- Enforce fresh per-request role, tenant, ownership and lease checks for every list/reveal/create/rotate/revoke operation; default deny. Require independent approval or step-up MFA for high-value actions.
-- Use managed KMS-backed AES-256-GCM envelope encryption with fresh nonces and authenticated metadata, protected keys, tested backup/restore and rotation. Use parameterized queries when a database is introduced. Do not place keys in browser bundles.
-- Make access and change events durable, attributable, redacted and tamper-resistant; require audit persistence before releasing protected values. Separate security operator permissions from key-use permissions.
-- Verify HTTPS/TLS settings at the actual edge, plus HSTS, `frame-ancestors`, MIME-sniffing and permissions headers. GitHub Pages static export cannot install Next response headers. A CSP meta tag cannot enforce `frame-ancestors`; clickjacking remains unmitigated here.
-- Review dependencies against a reachable advisory source; pin reviewed Actions SHAs and add dependency monitoring. CI checks do not establish supply-chain trust by themselves.
-- Review historical ZIPs and Git history, revoke any genuinely live values, and retire old deployments. Removing localStorage does not clear other devices, cached artifacts, clipboard history or already-exfiltrated credentials.
+Hardware/browser loss discards sample state; network drops deny auth and allow retry;
+software/schema errors deny membership; configuration errors disable login or rate
+checks; a human can still misassign a role through admin SQL; dependency outages
+require operational recovery. Redis TTL prevents permanent bucket lockout. In-process
+counters cap at 5,000 entries and expire, but reset on instance restart and do not
+coordinate across serverless instances. They are not a DDoS control.
 
-Reference: [MDN CSP guidance](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP) and [frame-ancestors limitations](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/frame-ancestors). Next behavior was checked against installed `node_modules/next/dist/docs/01-app/02-guides/static-exports.md` and `content-security-policy.md` before implementation.
+## 7. FMEA and WSES
 
-## 8. Verification status
+FMEA scores are estimates for prioritization, not measured probabilities. S/O/D use
+1–10; larger D means harder detection. RPN=S×O×D. Post scores assume code deployed,
+MFA enrolled and, for F3, shared rate limits configured. Otherwise the stated
+reductions do not apply. Critical real-vault architectural gaps retain their risk.
 
-- Security regression suite: passed. Exercises legacy storage non-read/non-write, scoped deletion, denied-storage behavior, fresh record copies, exact CSP hash bytes, policy placement, unsafe-script exclusions and malformed/repeated-export failure.
-- Application/scripts/tests ESLint: passed. Repository-wide `npm run lint` has pre-existing CommonJS import errors in `.github/prompts/` tooling; those files were not rewritten.
-- TypeScript (`npx tsc --noEmit`): passed. Production `npm run build`: passed with subprocess access; all routes statically exported and 10 HTML files hardened. Independently verified CSP placement before scripts and matching hashes for every inline script in all 10 files. The first sandboxed build failed because subprocess output was denied; no type checking was disabled.
-- Two pre-existing compile defects repaired during validation: missing `Fingerprint` icon import in `RoleWorkspace.tsx` and the Motion easing tuple type in `login/page.tsx`.
-- `git diff --check`: passed.
-- Dependency advisory scan: `npm audit --omit=dev --json` failed with registry DNS `EAI_AGAIN`. No clean dependency result is claimed.
-- Browser interaction, deployed HTTP headers/TLS, load/failover, backend authorization, cryptographic storage and immutable logging tests: not performed / backend controls absent.
+| Failure | Before S/O/D | RPN | After S/O/D | RPN | Basis |
+| --- | --- | --- | --- | --- | --- |
+| Password compromise grants workspace | 9/6/7 | 378 | 9/3/4 | 108 | MFA and auth events; enrollment bootstrap still matters |
+| Guessing / action abuse | 7/7/6 | 294 | 7/4/4 | 112 | Application windows + provider/edge controls; not a guarantee |
+| Factor ownership/replacement mistake | 9/5/7 | 315 | 9/2/3 | 54 | Ownership, verified-factor protection, regression tests |
+| Unnoticed auth/access abuse | 8/5/8 | 320 | 8/5/5 | 200 | Structured events; immutable retention missing |
+| Dependency vulnerability | 9/4/7 | 252 | 9/2/3 | 54 | Patch + advisory check; new vulnerabilities remain possible |
+| Wrong displayed identity | 5/7/5 | 175 | 5/2/2 | 20 | Verified account display |
+| Auth/DB outage | 6/4/3 | 72 | 6/4/3 | 72 | Correct hard dependency retained |
+| Treat sample vault as real | 10/6/7 | 420 | 10/6/7 | 420 | Backend still absent; no false risk reduction |
+
+WSES = 2A + 3D + 2P + C with Low=1, Medium=3, High=5. Incident history is unknown;
+P=3 is a planning assumption (±4 total uncertainty), not evidence of incidents.
+Security controls do not inherently reduce accessibility or data sensitivity, so
+scores are intentionally not forced downward.
+
+| Component | Before A/D/P/C → score | After A/D/P/C → score |
+| --- | --- | --- |
+| Login | 5/5/3/3 → 34 | 5/5/3/3 → 34 |
+| MFA flow | Not present | 3/5/3/3 → 30 |
+| Membership authorization | 3/5/3/3 → 30 | 3/5/3/3 → 30 |
+| Sample vault UI | 3/1/3/3 → 18 | 3/1/3/3 → 18 |
+| CI / dependency supply chain | 3/5/3/5 → 32 | 3/5/3/5 → 32 |
+| Security event sink | Not implemented | 3/3/3/3 → 24 |
+
+## 8. Remaining production blockers and rollout
+
+1. **Actual vault backend:** tenant/object ownership, authenticated encryption
+   (managed KMS/envelope AES-256-GCM), key rotation/versioning, validated persistence,
+   scoped reveal, expiry, revocation, transactional approvals and independent
+   approvers. Do not store real values in the browser or add a superficial AES label.
+2. **Immutable audit:** durable access/change records with trusted actor attribution,
+   protected retention, independent monitoring and recovery. stdout and synthetic
+   dashboard rows do not meet this requirement.
+3. **Distributed abuse controls:** configure both Redis REST variables if using the
+   included shared limiter, Supabase Auth limits and Vercel edge limits. Direct
+   provider traffic can bypass this app's counters; provider protection remains
+   necessary. Account-based throttling can itself be used for temporary lockouts.
+4. **MFA rollout/recovery:** enable Supabase TOTP enrollment/verification, have users
+   enroll after password login, verify existing factors, and document restricted
+   admin recovery. No password-only removal of a verified factor is provided. Users
+   with unsupported factor types must be recovered by an administrator. Live TOTP
+   testing is required before rollout to all users.
+5. **Infrastructure:** verify TLS versions/HTTPS at the edge, provider password policy,
+   operator MFA, log retention, backups/restore and monitoring. HSTS does not prove
+   TLS 1.3-only operation. Free-tier sleep/quotas are not high-availability guarantees.
+6. **Session policy:** current-session refresh revocation is implemented; already
+   issued access tokens may survive until expiry. Configure provider session lifetime
+   and reauthentication policy. Existing rendered sample content cannot be remotely
+   erased by a later role change.
+7. **Historical exposure and supply chain:** audit archives/history separately,
+   retire old static deployments, rotate any real credentials used previously,
+   restrict deployment administrators and review dependency updates. CI action tags
+   and dependency advisories alone do not establish end-to-end supply-chain trust.
+
+No new SQL migration or service-role key is required for the MFA code. The existing
+membership migration remains applicable. Shared Redis is optional for compatibility
+with the already-working login, but required to claim shared application throttling.
+See `SUPABASE_AUTH_SETUP.md` for exact rollout and environment configuration.
+
+## 9. Verification
+
+Final local results: production build on Next.js 16.4.5 passed; TypeScript, application lint and `git diff --check` passed; all 18 security regression tests passed. The full npm advisory scan (including development dependencies) reported **0 known vulnerabilities** after the dependency patches. CI also checks the full dependency tree for high/critical advisories. This is a dated advisory result, not proof of absence of flaws.
+
+Repository-wide lint exits successfully with one existing unused-variable warning
+in `.github/prompts/design-system/scripts/generate-tokens.cjs`. CommonJS files
+explicitly permit `require()`; application TypeScript rules remain enabled.
+
+HTTP smoke checks against the production server confirmed anonymous and forged-cookie denial for all five workspaces and `/mfa/`, no-store responses, per-request CSP nonce variation, Permissions Policy and HSTS. A cross-origin request using the real login Server Action identifier was rejected (HTTP 500 from the framework origin check). No live accounts were used.
+
+Tests cover legitimate
+roles as well as absent/forged identity, claim subject mismatch, AAL1 bypass,
+missing/disabled membership, foreign MFA factors, invalid codes, rate exhaustion,
+failed MFA upgrade, verified-factor replacement, Redis outage and log field safety.
+Live Supabase database/RLS, TOTP enrollment/recovery, Redis service, provider settings,
+TLS negotiation and cloud rollout have NOT been independently verified here.
+
+Primary references: [Supabase MFA](https://supabase.com/docs/guides/auth/auth-mfa),
+[provider rate limits](https://supabase.com/docs/guides/auth/rate-limits),
+[Redis REST commands](https://upstash.com/docs/redis/features/restapi),
+[Next critical advisory](https://github.com/advisories/GHSA-673q-mjm6-r5xr).
+Installed Next documentation for proxy, Server Actions, data security and CSP was
+reviewed before changing the code, including after the framework patch upgrade.
