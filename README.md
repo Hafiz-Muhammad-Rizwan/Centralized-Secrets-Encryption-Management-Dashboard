@@ -21,7 +21,7 @@ unless `SECURITY_DATA_ENABLED=true` and `VAULT_ENABLED=true` are configured.
 npm ci
 npm run dev
 npm run test:security
-npx tsc --noEmit
+npm run typecheck
 npm run lint
 npm run build
 npm start
@@ -29,6 +29,9 @@ npm start
 
 CI additionally runs isolated PostgreSQL authorization tests, scans dependencies,
 and produces an SBOM. Do not execute `tests/sql/` against a live project.
+
+`npm run typecheck` generates Next.js route types before running TypeScript, so
+it also works on a clean checkout without an existing `.next/` directory.
 
 Vercel runs the Next.js server at the domain root; static export is unsupported.
 Old `out/` directories/ZIPs may still exist locally or in history and must not be

@@ -41,7 +41,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f tests/sql/vault-security.sql
       - run: npm run test:security
       - run: npx eslint src scripts tests next.config.ts
-      - run: npx tsc --noEmit
+      - run: npm run typecheck
       - run: npm run build
       - run: npm sbom --sbom-format cyclonedx > sbom.cdx.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
