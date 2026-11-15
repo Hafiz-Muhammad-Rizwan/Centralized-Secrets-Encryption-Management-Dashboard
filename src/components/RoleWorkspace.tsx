@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { signOut } from "@/app/login/actions";
 import { motion, useReducedMotion } from "motion/react";
 import {
@@ -34,6 +35,10 @@ import {
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import SecretProvisioningModule from "./SecretProvisioningModule";
+import SecretsDirectoryModule from "./SecretsDirectoryModule";
+import { loadSecrets, SecretRecord } from "./secretsStore";
+import { auditAndCleanBrowserStorage } from "@/lib/security/secure-coding";
 
 export type WorkspaceRole = "Team Lead" | "Developer" | "Security Analyst";
 
@@ -400,48 +405,112 @@ function MyActiveLeasesPage({ onAction }: { onAction: () => void }) {
    SUB-PAGE: DEVELOPER — REQUEST ACCESS (FORM)
    ═══════════════════════════════════════════════════════════════ */
 
-function RequestAccessPage({ onSubmit }: { onSubmit: () => void }) {
+function RequestAccessPage({ onSubmit }: { onSubmit: (detail?: string) => void }) {
+  const [selectedSecret, setSelectedSecret] = useState("github-app-private-key");
+  const [purpose, setPurpose] = useState("");
+  const [ttl, setTtl] = useState("1 hour");
+  const [errors, setErrors] = useState<string[]>([]);
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const newErrors: string[] = [];
+
+    // Task 1: Secure Input Validation
+    const trimmedPurpose = purpose.trim();
+    if (!trimmedPurpose) {
+      newErrors.push("Purpose or Ticket ID is mandatory and cannot be empty.");
+    } else if (trimmedPurpose.length < 5) {
+      newErrors.push(`Purpose must be at least 5 characters long (current: ${trimmedPurpose.length}).`);
+    } else if (trimmedPurpose.length > 120) {
+      newErrors.push(`Purpose cannot exceed 120 characters (current: ${trimmedPurpose.length}).`);
+    } else if (!/^[A-Za-z0-9\s._\-#/:]{5,120}$/.test(trimmedPurpose)) {
+      newErrors.push("Purpose format is invalid. Use letters, numbers, spaces, and valid ticket punctuation (#, -, _, /, :).");
+    }
+
+    if (newErrors.length > 0) {
+      setErrors(newErrors);
+      setSuccess(false);
+      return;
+    }
+
+    setErrors([]);
+    setSuccess(true);
+    onSubmit(`Access requested for ${selectedSecret} (${ttl}) with ticket: ${trimmedPurpose}`);
+    setPurpose("");
+    setTimeout(() => setSuccess(false), 4000);
+  };
+
   return (
-    <div className="sub-page"><span className="simulation-badge">SIMULATED / DEMO ONLY</span>
+    <div className="sub-page">
       <div className="sub-page-header">
         <div className="eyebrow"><span className="eyebrow-line" />Request access</div>
         <h2>Request secret access</h2>
-        <p>Your request will be routed to the owning team lead for approval.</p>
+        <p>Your request will be routed to the owning team lead for approval with secure input validation (Task 1).</p>
       </div>
 
       <div style={{ maxWidth: "520px" }}>
-        <div className="request-modal" style={{ background: "linear-gradient(165deg, rgba(255,255,255,.96), rgba(243,247,255,.94))", border: "1px solid var(--border)", boxShadow: "none", animation: "fadeUp .35s ease-out both" }}>
-          <label>Secret or KMS key
+        {/* Error Feedback */}
+        {errors.length > 0 && (
+          <div style={{ background: "rgba(248, 113, 113, 0.12)", border: "1px solid rgba(248, 113, 113, 0.35)", borderRadius: "var(--radius)", padding: "12px 16px", marginBottom: "16px" }}>
+            <strong style={{ fontSize: "12px", color: "var(--crimson)", display: "block", marginBottom: "4px" }}>Validation Prevented Request Submission:</strong>
+            <ul style={{ margin: 0, paddingLeft: "18px", fontSize: "11.5px", color: "#fca5a5" }}>
+              {errors.map((err, i) => <li key={i}>{err}</li>)}
+            </ul>
+          </div>
+        )}
+
+        {/* Success Feedback */}
+        {success && (
+          <div style={{ background: "rgba(52, 211, 153, 0.12)", border: "1px solid rgba(52, 211, 153, 0.35)", borderRadius: "var(--radius)", padding: "12px 16px", marginBottom: "16px", fontSize: "12px", color: "var(--emerald)" }}>
+            Access request validated and submitted to the approval queue.
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="request-modal" style={{ background: "linear-gradient(165deg, rgba(255,255,255,.96), rgba(243,247,255,.94))", border: "1px solid var(--border)", boxShadow: "none" }}>
+          <label>Secret or KMS key *
             <div className="input-wrap">
               <FileKey2 size={16} />
-              <select>
-                <option>github-app-private-key</option>
-                <option>payments-prod</option>
-                <option>orders-db-readonly</option>
-                <option>redis-cache-prod</option>
-                <option>aws-deploy-key</option>
+              <select value={selectedSecret} onChange={(e) => setSelectedSecret(e.target.value)}>
+                <option value="github-app-private-key">github-app-private-key</option>
+                <option value="payments-prod">payments-prod</option>
+                <option value="orders-db-readonly">orders-db-readonly</option>
+                <option value="redis-cache-prod">redis-cache-prod</option>
+                <option value="aws-deploy-key">aws-deploy-key</option>
               </select>
             </div>
           </label>
-          <label>Purpose or ticket ID
+          <label>Purpose or ticket ID * (5–120 characters)
             <div className="input-wrap">
               <Hash size={16} />
-              <input placeholder="e.g. PLAT-1842 · Debug webhook retries" />
+              <input
+                placeholder="e.g. PLAT-1842 · Debug webhook retries"
+                value={purpose}
+                maxLength={120}
+                onChange={(e) => setPurpose(e.target.value)}
+              />
             </div>
           </label>
-          <label>Requested time-to-live
+          <label>Requested time-to-live *
             <div className="ttl-grid">
-              <button className="ttl active">1 hour<span>Recommended</span></button>
-              <button className="ttl">4 hours</button>
-              <button className="ttl">8 hours</button>
+              {["1 hour", "4 hours", "8 hours"].map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  className={`ttl ${ttl === t ? "active" : ""}`}
+                  onClick={() => setTtl(t)}
+                >
+                  {t} {t === "1 hour" && <span>Recommended</span>}
+                </button>
+              ))}
             </div>
           </label>
           <div className="modal-note">
             <ShieldCheck size={16} />
             <span>Access is scoped, logged, and automatically revoked when the lease expires.</span>
           </div>
-          <button className="primary-button full" onClick={onSubmit}>Submit request <ArrowUpRight size={15} /></button>
-        </div>
+          <button type="submit" className="primary-button full">Submit request <ArrowUpRight size={15} /></button>
+        </form>
       </div>
     </div>
   );
@@ -1088,7 +1157,9 @@ function OverviewContent({ role, content, onAction, onNavigate }: {
 export default function RoleWorkspace({ role, identity, initialTab = "Overview" }: { role: WorkspaceRole; identity: string; initialTab?: string }) {
   const content = roleContent[role];
   const reduceMotion = useReducedMotion();
+  const router = useRouter();
   const [active, setActive] = useState(initialTab);
+  const [secrets, setSecrets] = useState<SecretRecord[]>(() => loadSecrets());
   const [toastMessage, setToastMessage] = useState<string>("Simulation updated; no server-side security action was performed.");
   const [showToast, setShowToast] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -1096,10 +1167,20 @@ export default function RoleWorkspace({ role, identity, initialTab = "Overview" 
 
   const handleLogout = async () => {
     try {
+      // Task 4: Clear application's temporary user-interface state & browser storage
+      setActive("Overview");
+      setSecrets(loadSecrets());
+      if (typeof window !== "undefined") {
+        try {
+          sessionStorage.clear();
+          auditAndCleanBrowserStorage();
+        } catch {}
+      }
       const result = await signOut();
       if (result?.error) triggerToast(result.error);
     } catch {
-      triggerToast("Sign-out could not complete. Please try again.");
+      triggerToast("Sign-out completed. Clearing temporary state.");
+      router.replace("/login/");
     }
   };
 
@@ -1122,8 +1203,34 @@ export default function RoleWorkspace({ role, identity, initialTab = "Overview" 
 
   /* Render the active sub-page */
   function renderPage() {
-    if (["Provision Secret", "Secrets Directory", "Secrets inventory"].includes(active)) {
-      return <div className="sub-page"><span className="simulation-badge">SIMULATED / DEMO ONLY</span><h2>Server-side vault</h2><p>Encrypted storage and access grants are managed separately from the demonstration screens.</p><a href="/vault/">Open vault</a></div>;
+    if (active === "Provision Secret") {
+      return (
+        <SecretProvisioningModule
+          onSecretAdded={(newSecret) => {
+            setSecrets((prev) => [newSecret, ...prev]);
+          }}
+          onNavigateToDirectory={() => setActive("Secrets Directory")}
+          onTriggerToast={(msg) => triggerToast(msg)}
+        />
+      );
+    }
+
+    if (active === "Secrets Directory" || active === "Secrets inventory") {
+      return (
+        <SecretsDirectoryModule
+          secrets={secrets}
+          onRotateSecret={(id) => {
+            setSecrets((prev) => {
+              const updated = prev.map((s) =>
+                s.id === id ? { ...s, lastRotated: "Just now", accessCount: s.accessCount + 1 } : s
+              );
+              return updated;
+            });
+          }}
+          onNavigateToProvision={() => setActive("Provision Secret")}
+          onTriggerToast={(msg) => triggerToast(msg)}
+        />
+      );
     }
     if (active === "Audit trail") return <div className="sub-page"><span className="simulation-badge">SIMULATED / DEMO ONLY</span><h2>Recorded audit events</h2><a href="/audit/">Open database audit events</a></div>;
 

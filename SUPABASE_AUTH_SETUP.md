@@ -1,16 +1,15 @@
 # Enable real password login
 
-> **Superseded rollout guidance:** The V-01–V-13 remediation adds a required MFA
-> approval migration, server-side vault, environment-held encryption key, account
-> recovery/session controls and Redis outage fallback. Follow `VAULT_OPERATIONS.md`
-> and `REMEDIATION_SUMMARY.md` for the current release. The remaining sections below
-> describe the preceding authentication-only review; older test counts, missing
-> vault statements and fail-closed Redis policy are historical.
+> **Current authentication flow:** Workspace login uses Supabase email/password
+> plus native Supabase TOTP (AAL2). No administrator enrollment token is needed
+> for workspace access. The optional server-side vault migration still adds its
+> own factor-approval, session and encryption controls; see
+> `VAULT_OPERATIONS.md` and `REMEDIATION_SUMMARY.md` for that extended rollout.
+
 
 
 This version uses Next.js on Vercel, not a static export. Authentication and route
-roles are real; the vault payloads, approvals, rotation and event lists still use
-sample data. No real secret storage has been implemented.
+roles are real; the role dashboards still contain sample data.
 
 ## 1. Vercel environment variables
 
@@ -165,9 +164,11 @@ QR code in their authenticator app and verify its six-digit code. Existing TOTP
 users enter their code. After verification they reach their assigned workspace.
 The header now shows the verified account email instead of fictional sample names.
 
-Before deploying, confirm in Supabase Authentication that TOTP enrollment and
-verification are enabled. Keep the existing two Supabase environment variables and
-membership table. No extra SQL migration or privileged Supabase API key is needed.
+This is the standard Supabase TOTP flow: no administrator-issued enrollment token
+or approval RPC is needed for workspace login. The separate vault migration keeps
+its optional factor-approval controls for encrypted-vault access. Before deploying,
+confirm in Supabase Authentication that TOTP enrollment and verification are
+enabled. Keep the two Supabase environment variables and the membership table.
 Test with a designated account first, including enrollment, returning-user login,
 wrong code, wrong-role URL, sign-out and an inactive membership. Coordinate the MFA
 change with existing users; do not deploy without a recovery owner available.

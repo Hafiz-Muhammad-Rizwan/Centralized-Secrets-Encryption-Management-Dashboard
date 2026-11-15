@@ -18,9 +18,9 @@ function moduleAt(path, imports = {}, env = {}) {
 }
 const policy = moduleAt('src/lib/auth/policy.ts');
 const redirect = (path) => { throw Error(`redirect:${path}`); };
-function authModule({ user = { id: 'verified', user_metadata: { role: 'team_lead' } }, member = null, userError = null, memberError = null, offline = false, aal = 'aal2', claimsError = null, subject = 'verified', approved = true, sessionAllowed = true, securityEnabled = false } = {}) {
+function authModule({ user = { id: 'verified', user_metadata: { role: 'team_lead' } }, member = null, userError = null, memberError = null, offline = false, aal = 'aal2', claimsError = null, subject = 'verified', sessionAllowed = true, securityEnabled = false } = {}) {
   const client = {
-    rpc: async name => ({ data: name === 'check_mfa_approval' ? approved : sessionAllowed, error: null }),
+    rpc: async () => ({ data: sessionAllowed, error: null }),
     auth: { async getUser() { if (offline) throw Error('offline'); return { data: { user }, error: userError }; }, async getClaims() { return { data: { claims: { sub: subject, aal } }, error: claimsError }; } },
     from(table) {
       assert.equal(table, 'workspace_members');
@@ -136,10 +136,8 @@ test('a password-only session cannot enter any protected role even with a valid 
 });
 
 
-test('AAL2 alone cannot bypass factor approval or enabled session revocation', async () => {
-  for (const settings of [{ approved: false }, { sessionAllowed: false, securityEnabled: true }]) {
-    const auth = authModule({ member: { role: 'developer', active: true }, ...settings });
-    assert.equal(await auth.currentAccess(), null);
-    await assert.rejects(auth.requireRole('developer'), /redirect:\/login/);
-  }
+test('AAL2 cannot bypass an enabled session revocation check', async () => {
+  const auth = authModule({ member: { role: 'developer', active: true }, sessionAllowed: false, securityEnabled: true });
+  assert.equal(await auth.currentAccess(), null);
+  await assert.rejects(auth.requireRole('developer'), /redirect:\/login/);
 });

@@ -18,10 +18,10 @@ function load(path, imports = {}, env = {}, extras = {}) {
 }
 const factorId = '12345678-1234-1234-1234-123456789abc';
 const redirect = path => { throw Error(`redirect:${path}`); };
-function mfa({ active = true, foreign = false, verified = false, upgrade = true, limited = false, error = false, bootstrap = true } = {}) {
+function mfa({ active = true, foreign = false, verified = false, upgrade = true, limited = false, error = false } = {}) {
   let verifyCalls = 0; let enrollCalls = 0; let unenrollCalls = 0;
   const member = { userId: 'owner', role: 'developer', mfaVerified: verified, factors: verified ? [{ id: factorId, type: 'totp' }] : [] };
-  const client = { rpc: async () => ({ data: bootstrap, error: null }), auth: {
+  const client = { rpc: async () => ({ data: true, error: null }), auth: {
     getUser: async () => ({ data: { user: { id: 'owner', factors: foreign ? [] : [{ id: factorId, factor_type: 'totp', status: verified ? 'verified' : 'unverified' }] } }, error: null }),
     mfa: {
       challengeAndVerify: async () => { verifyCalls++; member.mfaVerified = upgrade; return { error: error ? Error('provider private info') : null }; },
@@ -57,14 +57,14 @@ test('MFA accepts only an upgraded verified session; provider errors remain gene
   }
 });
 test('password-only requests cannot remove or replace an existing verified factor', async () => {
-  for (const settings of [{ verified: true }, { active: false }, { limited: true }, { bootstrap: false }]) {
+  for (const settings of [{ verified: true }, { active: false }, { limited: true }]) {
     const { actions, calls } = mfa(settings);
-    assert.match((await actions.enrollAuthenticator('a'.repeat(64))).error, /Unable/);
+    assert.match((await actions.enrollAuthenticator()).error, /Unable/);
     assert.equal(calls().enrollCalls, 0);
     assert.equal(calls().unenrollCalls, 0);
   }
   const { actions, calls } = mfa();
-  assert.equal((await actions.enrollAuthenticator('a'.repeat(64))).factorId, factorId);
+  assert.equal((await actions.enrollAuthenticator()).factorId, factorId);
   assert.equal(calls().unenrollCalls, 1);
 });
 test('local rate buckets enforce counts and expire', async () => {

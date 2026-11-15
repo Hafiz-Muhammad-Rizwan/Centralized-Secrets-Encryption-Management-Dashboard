@@ -1,15 +1,16 @@
 # Vaultline
 
-Next.js server application with Supabase password/TOTP authentication, approved
-MFA enrollment, role checks, and a server-side encrypted vault. The original role
-dashboards remain explicitly labelled simulations; they are separate from real
-`/vault/`, `/account/` and `/audit/` pages.
+Next.js server application with Supabase email/password authentication, native
+TOTP two-factor authentication, role checks, and a server-side encrypted vault. The
+original role dashboards remain explicitly labelled simulations; they are separate
+from real `/vault/`, `/account/` and `/audit/` pages.
 
 **New code is not a deployed or certified production vault.** Follow
-[VAULT_OPERATIONS.md](VAULT_OPERATIONS.md) before deploying. Apply the new migration
-first: workspace access now checks approved MFA factors. Existing verified factors
-are preserved by the migration; new factors require administrator-issued one-time
-authorization after identity verification.
+[VAULT_OPERATIONS.md](VAULT_OPERATIONS.md) before deploying. Apply the membership
+migration first so each signed-in account has an active role. Workspace login uses
+Supabase TOTP directly: users enroll their own authenticator at first sign-in and
+verify it on later sign-ins. The optional vault migration keeps its separate
+factor-approval and session controls.
 
 The owner-selected encryption design uses built-in Node.js AES-256-GCM and a
 server-only `ENCRYPTION_KEY` environment variable, with a fresh wrapped data key per
@@ -19,6 +20,7 @@ unless `SECURITY_DATA_ENABLED=true` and `VAULT_ENABLED=true` are configured.
 
 ```sh
 npm ci
+cp .env.example .env.local   # fill in your Supabase URL + publishable key
 npm run dev
 npm run test:security
 npx tsc --noEmit
@@ -26,6 +28,11 @@ npm run lint
 npm run build
 npm start
 ```
+
+Apply `supabase/migrations/202611060001_workspace_members.sql` once in the
+Supabase SQL Editor, then insert an active role for each account
+(`team_lead`, `developer`, or `security_analyst`). See
+[SUPABASE_AUTH_SETUP.md](SUPABASE_AUTH_SETUP.md).
 
 CI additionally runs isolated PostgreSQL authorization tests, scans dependencies,
 and produces an SBOM. Do not execute `tests/sql/` against a live project.

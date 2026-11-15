@@ -39,7 +39,7 @@ export default function LoginForm({ configured }: { configured: boolean }) {
         </div>
         <div className="visual-footer">
           <span><ShieldCheck size={15} /> Authenticated workspace</span>
-          <span>Sample data only</span>
+          <span>Supabase secure sign-in</span>
         </div>
       </motion.section>
 

@@ -17,10 +17,6 @@ export async function currentAccess(existingClient?: Awaited<ReturnType<typeof c
     if (memberError) { await audit("auth_unavailable", user.id); return null; }
     const role = assignedRole(data);
     if (!role) { await audit("access_denied", user.id); return null; }
-    if (verified.claims.aal === "aal2") {
-      const { data: factorApproved, error: approvalError } = await client.rpc("check_mfa_approval");
-      if (approvalError || factorApproved !== true) return null;
-    }
     if (process.env.SECURITY_DATA_ENABLED === "true") {
       const { data: sessionAllowed, error: sessionError } = await client.rpc("check_workspace_session");
       if (sessionError || sessionAllowed !== true) return null;
