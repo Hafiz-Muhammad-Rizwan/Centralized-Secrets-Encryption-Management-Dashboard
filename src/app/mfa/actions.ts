@@ -10,15 +10,12 @@ import { allowAttempt } from "@/lib/security/rate-limit";
 export type MfaState = { error: string; factorId?: string; qr?: string; secret?: string };
 const denied = { error: "Unable to complete verification. Check the code and try again, or contact your administrator." };
 
-export async function enrollAuthenticator(token: string): Promise<MfaState> {
-  if (typeof token !== "string" || !/^[a-f0-9]{64}$/.test(token)) return denied;
+export async function enrollAuthenticator(): Promise<MfaState> {
   try {
     const client = await createAuthClient(true);
     const access = await currentAccess(client);
     if (!access || access.factors.length > 0) return denied;
     if (!await allowAttempt("enroll", access.userId, 3, 15 * 60_000)) return denied;
-    const { data: authorized, error: bootstrapError } = await client.rpc("authorize_mfa_bootstrap", { token });
-    if (bootstrapError || authorized !== true) return denied;
     // Clean up only this user's UNVERIFIED attempts; never replace a verified MFA
     // factor based on a password alone. This keeps interrupted enrollment recoverable.
     const { data: { user }, error } = await client.auth.getUser();
@@ -32,8 +29,6 @@ export async function enrollAuthenticator(token: string): Promise<MfaState> {
     }
     const { data, error: enrollError } = await client.auth.mfa.enroll({ factorType: "totp", issuer: "Vaultline" });
     if (enrollError || !data) return denied;
-    const { data: registered, error: registerError } = await client.rpc("register_mfa_factor", { factor: data.id });
-    if (registerError || registered !== true) return denied;
     await audit("mfa_enrolled", access.userId);
     // Seed is returned only during enrollment to its authenticated owner; never logged.
     return { error: "", factorId: data.id, qr: data.totp.qr_code, secret: data.totp.secret };

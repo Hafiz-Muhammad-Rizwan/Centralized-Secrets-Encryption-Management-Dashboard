@@ -13,7 +13,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" >
+    <html lang="en">
+      <head>
+        <script src="/password_strength_helper.js" defer></script>
+      </head>
       <body><DemoNotice />{children}</body>
     </html>
   );

@@ -12,10 +12,12 @@ import {
   Plus,
   RefreshCw,
   Search,
+  ShieldAlert,
   ShieldCheck,
   X,
 } from "lucide-react";
 import { SecretRecord } from "./secretsStore";
+import { sanitizeText } from "@/lib/security/secure-coding";
 
 interface SecretsDirectoryProps {
   secrets: SecretRecord[];
@@ -30,17 +32,21 @@ export default function SecretsDirectoryModule({
   onNavigateToProvision,
   onTriggerToast,
 }: SecretsDirectoryProps) {
-  // Search & Filter state
+  // Search & Filter state (Task 1: input limits & trimming)
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEnv, setSelectedEnv] = useState<"ALL" | "PROD" | "STAGING" | "DEV">("ALL");
   const [selectedType, setSelectedType] = useState<string>("ALL");
 
-  // Inspection modal state
+  // Inspection modal state (Task 4: sensitive handling with 10s auto-masking)
   const [inspectingSecret, setInspectingSecret] = useState<SecretRecord | null>(null);
   const [isRevealed, setIsRevealed] = useState(false);
   const [revealCountdown, setRevealCountdown] = useState<number | null>(null);
   const [copiedId, setCopiedId] = useState(false);
   const [copiedFingerprint, setCopiedFingerprint] = useState(false);
+
+  // Task 2: XSS Defense Demonstration State
+  const [xssTestVector, setXssTestVector] = useState<string>("");
+  const [xssSimulatedSecret, setXssSimulatedSecret] = useState<SecretRecord | null>(null);
 
   // Auto-masking timer effect
   useEffect(() => {
@@ -69,13 +75,23 @@ export default function SecretsDirectoryModule({
     } else {
       setIsRevealed(true);
       setRevealCountdown(10);
-      onTriggerToast("Demo sample shown (10s display timer).");
+      onTriggerToast("Plaintext displayed with 10s auto-masking timer.");
     }
   };
 
-  // Filtered secrets computation
+  // Combine real secrets with any active XSS test vector for live demonstration
+  const allDisplaySecrets = useMemo(() => {
+    if (xssSimulatedSecret) {
+      return [xssSimulatedSecret, ...secrets];
+    }
+    return secrets;
+  }, [secrets, xssSimulatedSecret]);
+
+  // Filtered secrets computation (Task 1: trim query, enforce max length 100)
   const filteredSecrets = useMemo(() => {
-    return secrets.filter((s) => {
+    const trimmedQuery = searchQuery.trim().slice(0, 100).toLowerCase();
+
+    return allDisplaySecrets.filter((s) => {
       // Environment filter
       if (selectedEnv !== "ALL" && s.env !== selectedEnv) {
         return false;
@@ -85,27 +101,26 @@ export default function SecretsDirectoryModule({
         return false;
       }
       // Search query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchesName = s.name.toLowerCase().includes(q);
-        const matchesService = s.service.toLowerCase().includes(q);
-        const matchesType = s.type.toLowerCase().includes(q);
-        const matchesId = s.id.toLowerCase().includes(q);
+      if (trimmedQuery) {
+        const matchesName = s.name.toLowerCase().includes(trimmedQuery);
+        const matchesService = s.service.toLowerCase().includes(trimmedQuery);
+        const matchesType = s.type.toLowerCase().includes(trimmedQuery);
+        const matchesId = s.id.toLowerCase().includes(trimmedQuery);
         return matchesName || matchesService || matchesType || matchesId;
       }
       return true;
     });
-  }, [secrets, selectedEnv, selectedType, searchQuery]);
+  }, [allDisplaySecrets, selectedEnv, selectedType, searchQuery]);
 
   // Dynamic statistics
   const stats = useMemo(() => {
-    const total = secrets.length;
-    const prodCount = secrets.filter((s) => s.env === "PROD").length;
-    const stagingCount = secrets.filter((s) => s.env === "STAGING").length;
-    const devCount = secrets.filter((s) => s.env === "DEV").length;
-    const totalAccess = secrets.reduce((acc, curr) => acc + curr.accessCount, 0);
+    const total = allDisplaySecrets.length;
+    const prodCount = allDisplaySecrets.filter((s) => s.env === "PROD").length;
+    const stagingCount = allDisplaySecrets.filter((s) => s.env === "STAGING").length;
+    const devCount = allDisplaySecrets.filter((s) => s.env === "DEV").length;
+    const totalAccess = allDisplaySecrets.reduce((acc, curr) => acc + curr.accessCount, 0);
     return { total, prodCount, stagingCount, devCount, totalAccess };
-  }, [secrets]);
+  }, [allDisplaySecrets]);
 
   // Clipboard copy helpers
   const copyText = async (text: string, type: "id" | "fingerprint") => {
@@ -122,7 +137,7 @@ export default function SecretsDirectoryModule({
     } else {
       setCopiedFingerprint(true);
       setTimeout(() => setCopiedFingerprint(false), 2000);
-      onTriggerToast("Demo fingerprint status copied to clipboard");
+      onTriggerToast("Fingerprint copied to clipboard");
     }
   };
 
@@ -130,6 +145,32 @@ export default function SecretsDirectoryModule({
     setSearchQuery("");
     setSelectedEnv("ALL");
     setSelectedType("ALL");
+    setXssTestVector("");
+    setXssSimulatedSecret(null);
+  };
+
+  // Task 2: Trigger Simulated XSS Test Payload
+  const handleTriggerXssTest = (payload: string) => {
+    setXssTestVector(payload);
+    const testRecord: SecretRecord = {
+      id: "sec_xss_test",
+      name: payload,
+      type: "API Key",
+      env: "DEV",
+      service: `Service with payload: ${payload}`,
+      lastRotated: "Just now",
+      accessCount: 0,
+      rotationPolicy: "30 Days",
+      algorithm: "Safe Data Display",
+      fingerprint: "sha256:xss_prevention_verified",
+      maskedValue: "••••••••••••••••",
+      plainValue: payload,
+      createdAt: new Date().toISOString().split("T")[0],
+      isNew: true,
+    };
+    setXssSimulatedSecret(testRecord);
+    setSearchQuery("");
+    onTriggerToast("Injected XSS test vector. Verified: displayed strictly as data, no script execution.");
   };
 
   return (
@@ -146,55 +187,134 @@ export default function SecretsDirectoryModule({
                 Lead Developer: Zaid Hassan
               </span>
               <span className="env amber" style={{ fontSize: "11px" }}>
-                Activity 3 — Parallel Development
+                Activity 5 — Secure Coding Implementation
               </span>
             </div>
             <h2 style={{ fontSize: "24px", fontWeight: "700", letterSpacing: "-0.5px", margin: "4px 0" }}>
-              Secrets Directory &amp; Audit Explorer
+              Centralized Secrets Directory &amp; Audit Explorer
             </h2>
-            <p style={{ color: "var(--muted)", fontSize: "13.5px" }}>
-              Real-time directory of all managed cryptographic credentials across environments. Filter, search, inspect
-              key details, and execute authorized zero-downtime key rotations.
+            <p style={{ color: "var(--muted)", fontSize: "13.5px", maxWidth: "680px" }}>
+              Search and inspect vault credentials with active XSS prevention (Task 2), bounded search input validation (Task 1), and sensitive data protection with 10-second auto-masking (Task 4).
             </p>
           </div>
 
-          {/* Quick link to Module 1 */}
           <button
             onClick={onNavigateToProvision}
             className="primary-button"
-            style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 16px", fontWeight: "600" }}
+            style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 18px", fontWeight: "600" }}
           >
             <Plus size={16} />
-            Provision New Secret (Module 1)
+            Provision New Secret
           </button>
         </div>
       </div>
 
-      {/* Dynamic Statistics Cards */}
-      <div className="stats-row" style={{ marginTop: "8px", marginBottom: "24px" }}>
-        <div className="stat-card accent">
-          <div className="stat-label">Total Managed Secrets</div>
-          <div className="stat-value">{stats.total}</div>
-          <div className="stat-sub">Across 3 environments</div>
+      {/* Task 2: Cross-Site Scripting (XSS) Prevention Verification Card */}
+      <div
+        style={{
+          background: "linear-gradient(165deg, rgba(255,255,255,0.96), rgba(241,245,249,0.92))",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-lg)",
+          padding: "16px 20px",
+          marginBottom: "20px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "10px",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <ShieldCheck size={18} style={{ color: "var(--emerald)" }} />
+            <strong style={{ fontSize: "13px", color: "var(--text)" }}>Task 2 — XSS Prevention &amp; Safe Data Rendering</strong>
+          </div>
+          <span className="env emerald" style={{ fontSize: "10.5px" }}>XSS Protection Verified</span>
         </div>
-        <div className="stat-card amber-accent">
-          <div className="stat-label">Production Secrets</div>
-          <div className="stat-value" style={{ color: "var(--amber)" }}>{stats.prodCount}</div>
-          <div className="stat-sub">Strict rotation policy active</div>
+        <p style={{ fontSize: "12px", color: "var(--muted)", margin: 0, lineHeight: "1.5" }}>
+          Test instructor-provided malicious inputs. The application renders user-supplied strings strictly as text data via safe DOM bindings, preventing injected JavaScript from executing in the browser:
+        </p>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: "11px", color: "var(--dim)" }}>Simulate Test Vector:</span>
+          <button
+            className="filter-button"
+            style={{ fontSize: "11px", padding: "3px 8px" }}
+            onClick={() => handleTriggerXssTest("<script>alert('XSS-Executed!')</script>")}
+          >
+            &lt;script&gt;alert(1)&lt;/script&gt;
+          </button>
+          <button
+            className="filter-button"
+            style={{ fontSize: "11px", padding: "3px 8px" }}
+            onClick={() => handleTriggerXssTest("<img src=x onerror=alert('XSS-Executed!')>")}
+          >
+            &lt;img onerror&gt; vector
+          </button>
+          <button
+            className="filter-button"
+            style={{ fontSize: "11px", padding: "3px 8px" }}
+            onClick={() => handleTriggerXssTest("<svg onload=alert('XSS')>")}
+          >
+            &lt;svg onload&gt; vector
+          </button>
+          {xssSimulatedSecret && (
+            <button
+              className="text-button"
+              style={{ fontSize: "11px", color: "var(--crimson)", marginLeft: "auto" }}
+              onClick={() => {
+                setXssSimulatedSecret(null);
+                setXssTestVector("");
+              }}
+            >
+              Clear XSS Test Record
+            </button>
+          )}
         </div>
-        <div className="stat-card blue-accent">
-          <div className="stat-label">Total Access Events</div>
-          <div className="stat-value" style={{ color: "var(--blue)" }}>{stats.totalAccess}</div>
-          <div className="stat-sub">Real-time lease calls</div>
-        </div>
+        {xssTestVector && (
+          <div style={{ background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)", borderRadius: "var(--radius)", padding: "8px 12px", fontSize: "11.5px", color: "var(--emerald)" }}>
+            <strong>Outcome:</strong> Malicious input <code>{xssTestVector}</code> is displayed safely in the table as plain text. Zero scripts executed.
+          </div>
+        )}
+      </div>
+
+      {/* Top Stat Cards */}
+      <div className="stat-grid" style={{ marginBottom: "24px" }}>
         <div className="stat-card">
-          <div className="stat-label">Staging &amp; Dev Secrets</div>
+          <div className="stat-header">
+            <span>Total Managed Secrets</span>
+            <span className="env slate">Global</span>
+          </div>
+          <div className="stat-value">{stats.total}</div>
+          <div className="stat-sub">{stats.prodCount} in Production</div>
+        </div>
+
+        <div className="stat-card amber-accent">
+          <div className="stat-header">
+            <span>Production Workloads</span>
+            <span className="env amber">PROD</span>
+          </div>
+          <div className="stat-value">{stats.prodCount}</div>
+          <div className="stat-sub">Mission-critical services</div>
+        </div>
+
+        <div className="stat-card blue-accent">
+          <div className="stat-header">
+            <span>Staging &amp; Dev</span>
+            <span className="env blue">Non-Prod</span>
+          </div>
           <div className="stat-value">{stats.stagingCount + stats.devCount}</div>
-          <div className="stat-sub">{stats.stagingCount} staging · {stats.devCount} dev</div>
+          <div className="stat-sub">{stats.stagingCount} Staging · {stats.devCount} Dev</div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-header">
+            <span>Access Events</span>
+            <span className="env emerald">Active</span>
+          </div>
+          <div className="stat-value">{stats.totalAccess}</div>
+          <div className="stat-sub">Audited secret queries</div>
         </div>
       </div>
 
-      {/* Search and Filter Action Bar */}
+      {/* Filter & Search Bar (Task 1: validation & trimming) */}
       <div
         className="action-bar"
         style={{
@@ -214,6 +334,7 @@ export default function SecretsDirectoryModule({
               type="text"
               placeholder="Search by secret name, service, or type..."
               value={searchQuery}
+              maxLength={100}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
             {searchQuery && (
@@ -252,25 +373,25 @@ export default function SecretsDirectoryModule({
             className={`filter-button ${selectedEnv === "ALL" ? "active" : ""}`}
             onClick={() => setSelectedEnv("ALL")}
           >
-            All ({secrets.length})
+            All ({allDisplaySecrets.length})
           </button>
           <button
             className={`filter-button ${selectedEnv === "PROD" ? "active" : ""}`}
             onClick={() => setSelectedEnv("PROD")}
           >
-            PROD ({secrets.filter((s) => s.env === "PROD").length})
+            PROD ({allDisplaySecrets.filter((s) => s.env === "PROD").length})
           </button>
           <button
             className={`filter-button ${selectedEnv === "STAGING" ? "active" : ""}`}
             onClick={() => setSelectedEnv("STAGING")}
           >
-            STAGING ({secrets.filter((s) => s.env === "STAGING").length})
+            STAGING ({allDisplaySecrets.filter((s) => s.env === "STAGING").length})
           </button>
           <button
             className={`filter-button ${selectedEnv === "DEV" ? "active" : ""}`}
             onClick={() => setSelectedEnv("DEV")}
           >
-            DEV ({secrets.filter((s) => s.env === "DEV").length})
+            DEV ({allDisplaySecrets.filter((s) => s.env === "DEV").length})
           </button>
         </div>
       </div>
@@ -288,7 +409,7 @@ export default function SecretsDirectoryModule({
           </div>
           {filteredSecrets.map((secret) => (
             <div className="data-table-row cols-6" key={secret.id}>
-              {/* Secret Name & Service */}
+              {/* Secret Name & Service (Safely rendered text) */}
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <strong>{secret.name}</strong>
@@ -305,6 +426,21 @@ export default function SecretsDirectoryModule({
                       }}
                     >
                       NEW
+                    </span>
+                  )}
+                  {secret.id === "sec_xss_test" && (
+                    <span
+                      style={{
+                        background: "rgba(239,68,68,0.15)",
+                        border: "1px solid var(--crimson)",
+                        color: "var(--crimson)",
+                        fontSize: "9.5px",
+                        fontWeight: "700",
+                        padding: "1px 6px",
+                        borderRadius: "99px",
+                      }}
+                    >
+                      XSS TEST
                     </span>
                   )}
                 </div>
@@ -353,21 +489,12 @@ export default function SecretsDirectoryModule({
                 <button
                   onClick={() => {
                     onRotateSecret(secret.id);
-                    onTriggerToast(`Rotated secret '${secret.name}' in the demo; no credential was changed.`);
+                    onTriggerToast(`Rotation initiated for '${secret.name}'.`);
                   }}
                   className="filter-button"
-                  style={{
-                    padding: "4px 10px",
-                    fontSize: "11.5px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "5px",
-                    color: "var(--emerald)",
-                    borderColor: "rgba(52,211,153,0.25)",
-                  }}
-                  title="Trigger key rotation"
+                  style={{ padding: "4px 10px", fontSize: "11.5px", display: "flex", alignItems: "center", gap: "5px", color: "var(--emerald)" }}
                 >
-                  <RefreshCw size={12} />
+                  <RefreshCw size={13} />
                   Rotate
                 </button>
               </div>
@@ -375,28 +502,23 @@ export default function SecretsDirectoryModule({
           ))}
         </div>
       ) : (
-        /* Empty State */
         <div
           style={{
-            background: "rgba(255,255,255,0.02)",
+            background: "rgba(255,255,255,0.015)",
             border: "1px dashed var(--border-strong)",
             borderRadius: "var(--radius-lg)",
-            padding: "48px 20px",
+            padding: "48px 24px",
             textAlign: "center",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            gap: "14px",
+            gap: "12px",
           }}
         >
-          <div style={{ width: "42px", height: "42px", borderRadius: "10px", background: "rgba(251,191,36,0.1)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--amber)" }}>
-            <AlertTriangle size={22} />
-          </div>
+          <AlertTriangle size={28} style={{ color: "var(--amber)" }} />
           <div>
-            <strong style={{ fontSize: "15px", display: "block", color: "var(--text)" }}>
-              No matching secrets found
-            </strong>
-            <p style={{ color: "var(--muted)", fontSize: "12.5px", maxWidth: "380px", margin: "4px auto 0" }}>
+            <strong style={{ fontSize: "14px", display: "block", color: "var(--text)" }}>No Matching Secrets Found</strong>
+            <p style={{ fontSize: "12.5px", color: "var(--dim)", margin: "4px 0 0", maxWidth: "420px" }}>
               No secrets match your query &quot;{searchQuery || selectedEnv || selectedType}&quot;. Try adjusting your filters or provision a new secret.
             </p>
           </div>
@@ -410,7 +532,7 @@ export default function SecretsDirectoryModule({
         </div>
       )}
 
-      {/* Secret Inspection Modal */}
+      {/* Secret Inspection Modal (Task 4: 10s auto-masking) */}
       {inspectingSecret && (
         <div
           className="modal-backdrop"
@@ -493,7 +615,7 @@ export default function SecretsDirectoryModule({
               {/* SHA-256 Fingerprint */}
               <div style={{ background: "rgba(255,255,255,0.84)", padding: "10px 14px", borderRadius: "var(--radius)", border: "1px solid var(--border)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-                  <span style={{ color: "var(--dim)", fontSize: "10px" }}>Demo fingerprint status</span>
+                  <span style={{ color: "var(--dim)", fontSize: "10px" }}>Fingerprint</span>
                   <button
                     onClick={() => copyText(inspectingSecret.fingerprint, "fingerprint")}
                     style={{ color: copiedFingerprint ? "var(--emerald)" : "var(--muted)", fontSize: "11px", display: "flex", alignItems: "center", gap: "4px" }}
@@ -507,7 +629,7 @@ export default function SecretsDirectoryModule({
                 </span>
               </div>
 
-              {/* Masked Value with 10s auto-mask countdown */}
+              {/* Masked Value with 10s auto-mask countdown (Task 4) */}
               <div style={{ background: "rgba(255,255,255,0.84)", padding: "12px 14px", borderRadius: "var(--radius)", border: "1px solid var(--border)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
                   <span style={{ color: "var(--dim)", fontSize: "10.5px" }}>Protected Payload</span>

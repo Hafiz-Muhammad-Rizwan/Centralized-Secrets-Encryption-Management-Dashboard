@@ -5,7 +5,11 @@ The owner selected **Node.js crypto + environment-held encryption keys**, not AW
 KMS. No paid key-management service or new production dependency is required.
 Hosting, database, Redis and email services still have their own quotas/pricing.
 
-## Apply before deploying the new authentication code
+## Apply before enabling the encrypted vault
+
+Workspace login itself uses native Supabase email/password + TOTP and only needs
+the membership migration. The additional migration below is required before the
+server-side vault or account session controls are enabled.
 
 1. Back up the project and record the existing memberships and verified MFA factors.
    Independently verify that existing factors are legitimate: the migration
@@ -19,18 +23,14 @@ Hosting, database, Redis and email services still have their own quotas/pricing.
    Keep `vault_private` OUT of the Data API exposed schemas. Never grant app roles
    access to its tables or private functions. Public RPC functions recheck the
    caller, role, MFA approval, session and secret ownership/grant independently.
-4. Enable Supabase TOTP. Existing verified factors are preserved. New users obtain
-   a token from `supabase/admin/issue_bootstrap_token.sql` after an administrator
-   verifies their identity outside the password channel. Replace the placeholder
-   UUID. Deliver the single-use token privately; it expires in 30 minutes. A failed
-   enrollment may consume it and need reissuance. Registration of the new factor
-   is tied to the session that consumed the token and expires after 10 minutes.
-   Direct provider enrollment without approval cannot open a workspace, even with
-   an AAL2 token. Do not publish the admin token-issuance SQL as an RPC.
-5. Configure the environment below and test with dedicated accounts. Apply the
-   migration **before deploying**: new code denies AAL2 workspace access if the
-   factor-approval database functions are unavailable. This is deliberate, not an
-   optional fail-open fallback.
+4. Enable Supabase TOTP. Workspace login enrolls/verifies TOTP directly through
+   Supabase. The encrypted vault additionally checks the migration's
+   `vault_private.approved_factors` table; this approval workflow is separate from
+   workspace login and must be reconciled by the administrator before enabling
+   `VAULT_ENABLED`. Do not publish factor-approval SQL as an RPC.
+5. Configure the environment below and test with dedicated accounts. The vault
+   database functions deny AAL2 vault access if the factor-approval functions are
+   unavailable. This is deliberate, not an optional fail-open fallback.
 6. Enable security session tracking, then enable the vault only after the tests
    and operational gates below pass. No live project was modified by this work.
 
