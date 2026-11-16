@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "@/app/login/actions";
 import { motion, useReducedMotion } from "motion/react";
@@ -37,6 +37,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import SecretProvisioningModule from "./SecretProvisioningModule";
 import SecretsDirectoryModule from "./SecretsDirectoryModule";
+import { listSecrets } from "@/app/secrets-directory/actions";
 import { auditAndCleanBrowserStorage } from "@/lib/security/secure-coding";
 
 export type WorkspaceRole = "Team Lead" | "Developer" | "Security Analyst";
@@ -105,6 +106,7 @@ const navByRole: Record<WorkspaceRole, NavItem[]> = {
   "Team Lead": [
     { label: "Overview", icon: LayoutGrid },
     { label: "Approval queue", icon: ClipboardCheck, count: "7" },
+    { label: "Provision secret", icon: Plus },
     { label: "Secrets inventory", icon: Server },
     { label: "Rotation schedules", icon: RefreshCw },
     { label: "Team directory", icon: Users },
@@ -112,6 +114,7 @@ const navByRole: Record<WorkspaceRole, NavItem[]> = {
   Developer: [
     { label: "Overview", icon: LayoutGrid },
     { label: "My active leases", icon: KeyRound, count: "3" },
+    { label: "Secrets inventory", icon: Server },
     { label: "Request access", icon: Plus },
     { label: "Request history", icon: Clock },
     { label: "Security posture", icon: ShieldCheck },
@@ -962,11 +965,12 @@ function WorkspaceSettingsPage() {
    OVERVIEW PAGE CONTENT (PER ROLE)
    ═══════════════════════════════════════════════════════════════ */
 
-function OverviewContent({ role, content, onAction, onNavigate }: {
+function OverviewContent({ role, content, onAction, onNavigate, liveVaultCount }: {
   role: WorkspaceRole;
   content: typeof roleContent[WorkspaceRole];
   onAction: () => void;
   onNavigate: (page: string) => void;
+  liveVaultCount?: number | null;
 }) {
   return (
     <>
@@ -1025,6 +1029,12 @@ function OverviewContent({ role, content, onAction, onNavigate }: {
               <p style={{ fontSize: "12.5px", color: "var(--muted)", margin: "4px 0 0" }}>
                 Validate, encrypt, and insert secrets into PostgreSQL through a role-gated server action with metadata persistence.
               </p>
+              {typeof liveVaultCount === "number" && (
+                <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "var(--emerald)", background: "rgba(52,211,153,0.12)", padding: "2px 8px", borderRadius: "var(--radius)", marginTop: "8px" }}>
+                  <Server size={12} />
+                  <span>Vault connected • Ready to provision</span>
+                </div>
+              )}
             </div>
             <button
               onClick={() => onNavigate("Provision Secret")}
@@ -1057,6 +1067,12 @@ function OverviewContent({ role, content, onAction, onNavigate }: {
             <p style={{ fontSize: "12.5px", color: "var(--muted)", margin: "4px 0 0" }}>
               Retrieve authorized database records, filter by environment and type, reveal plaintext on demand, and rotate encryption safely.
             </p>
+            {typeof liveVaultCount === "number" && (
+              <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "var(--blue)", background: "rgba(96,165,250,0.12)", padding: "2px 8px", borderRadius: "var(--radius)", marginTop: "8px" }}>
+                <Server size={12} />
+                <span>{liveVaultCount} encrypted secrets in PostgreSQL vault</span>
+              </div>
+            )}
           </div>
           <button
             onClick={() => onNavigate("Secrets Directory")}
@@ -1161,6 +1177,21 @@ export default function RoleWorkspace({ role, identity, initialTab = "Overview" 
   const router = useRouter();
   const [active, setActive] = useState(initialTab);
   const [directoryRefreshKey, setDirectoryRefreshKey] = useState(0);
+  const [liveVaultCount, setLiveVaultCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let activeEffect = true;
+    listSecrets()
+      .then((res) => {
+        if (!activeEffect) return;
+        if (res.data) setLiveVaultCount(res.data.length);
+      })
+      .catch(() => {});
+    return () => {
+      activeEffect = false;
+    };
+  }, [directoryRefreshKey]);
+
   const [toastMessage, setToastMessage] = useState<string>("Simulation updated; no server-side security action was performed.");
   const [showToast, setShowToast] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -1207,7 +1238,7 @@ export default function RoleWorkspace({ role, identity, initialTab = "Overview" 
 
   /* Render the active sub-page */
   function renderPage() {
-    if (active === "Provision Secret") {
+    if (active === "Provision Secret" || active === "Provision secret") {
       if (role !== "Team Lead") {
         return (
           <div className="sub-page">
@@ -1235,7 +1266,7 @@ export default function RoleWorkspace({ role, identity, initialTab = "Overview" 
       );
     }
 
-    if (active === "Secrets Directory" || active === "Secrets inventory") {
+    if (active === "Secrets Directory" || active === "Secrets inventory" || active === "secrets directory") {
       return (
         <SecretsDirectoryModule
           refreshKey={directoryRefreshKey}
@@ -1279,7 +1310,7 @@ export default function RoleWorkspace({ role, identity, initialTab = "Overview" 
     }
 
     /* Overview (default) */
-    return <OverviewContent role={role} content={content} onAction={handlePrimaryAction} onNavigate={setActive} />;
+    return <OverviewContent role={role} content={content} onAction={handlePrimaryAction} onNavigate={setActive} liveVaultCount={liveVaultCount} />;
   }
 
   return (
