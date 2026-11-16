@@ -3,7 +3,7 @@
 **Semester Project:** Centralized Secrets Encryption Management Dashboard (Vaultline)  
 **Academic Activity:** Project Activity 5 — Basic Secure Coding Implementation in Existing Semester Project  
 **Development Environment:** HTML, CSS, JavaScript / TypeScript, Next.js, and Web Browser  
-**Internet / Backend Requirement:** Not Required (100% operational offline)  
+**Internet / Backend Requirement:** Activity 5 controls are client-side. The surrounding Vaultline workspace uses Supabase authentication, so protected pages require a configured `.env.local` and network access.
 **Group Members:**
 - **Member 1:** Hafiz Muhammad Rizwan
 - **Member 2:** Zaid Hassan
@@ -14,7 +14,7 @@
 
 The objective of Project Activity 5 is to evaluate our existing semester project (**Vaultline — Centralized Secrets Encryption Management Dashboard**), identify potential security weaknesses across client-side components, implement standard secure coding practices directly into the source code, and verify their effectiveness through structured testing and demonstration.
 
-All security enhancements have been implemented in the active project codebase and verified with an automated security test suite comprising **40 passing tests** (`node --test tests/*.test.mjs`).
+All security enhancements have been implemented in the active project codebase and verified with an automated security test suite comprising **47 passing tests** (`node --test tests/*.test.mjs`).
 
 ---
 
@@ -122,8 +122,8 @@ All security enhancements have been implemented in the active project codebase a
 
 #### 1. Objective & File Integration:
 - Integrated the pre-developed security helper file:
-  - **`public/password_strength_helper.js`** (loaded via `<script src="/password_strength_helper.js" defer></script>` in `src/app/layout.tsx`).
-  - **`src/lib/security/password_strength_helper.ts`** (companion typed ES module).
+  - **`public/password_strength_helper.js`** — the provided implementation, loaded with `<script src="/password_strength_helper.js" nonce={nonce} defer></script>` in `src/app/layout.tsx`. The CSP nonce is required because the app runs under `script-src 'nonce-…' 'strict-dynamic'`.
+  - **`src/lib/security/password_strength_helper.ts`** — a thin typed adapter that calls the browser-provided `window.checkPasswordStrength` function. It does not reimplement or modify the helper's scoring logic. During server rendering, before the deferred browser script runs, it returns a neutral "evaluate in the browser" result.
 - Contains the required standard function:
   ```javascript
   checkPasswordStrength(password)
@@ -163,12 +163,12 @@ All security enhancements have been implemented in the active project codebase a
 | **TC-01** | Input Validation (`SecretProvisioningModule`) | Submit with empty Secret Identifier (`"   "`) | Form blocks submission; displays *"Secret Identifier is mandatory and cannot be empty."* | Submission blocked; red alert displayed with exact error. | **PASS** |
 | **TC-02** | Input Validation (`SecretProvisioningModule`) | Identifier `"PAYMENT API KEY!"` (uppercase + spaces) | Rejected: must match lowercase alphanumeric format `/^[a-z0-9-_]{3,50}$/`. | Error: *"Secret Identifier format is invalid. Use lowercase alphanumeric characters..."* | **PASS** |
 | **TC-03** | Input Validation (`RoleWorkspace` - Request Access) | Ticket purpose `"Bug"` (3 characters; min is 5) | Form blocks submission; informs user that purpose must be at least 5 characters. | Error: *"Purpose must be at least 5 characters long (current: 3)."* | **PASS** |
-| **TC-04** | XSS Prevention (`SecretsDirectoryModule`) | Injected search query `<script>alert('XSS')</script>` | Script does NOT execute. String is displayed purely as inert text data. | Zero JavaScript execution; string rendered as safe text node. | **PASS** |
-| **TC-05** | XSS Prevention (`SecretProvisioningModule`) | Injected `<img src=x onerror=alert('XSS')>` into Secret Name | Input validation blocks submission due to dangerous HTML tags. | Error: *"Malicious script pattern detected in input."* | **PASS** |
+| **TC-04** | XSS Prevention (`SecretsDirectoryModule`) | Click the `<script>alert('XSS')</script>`, `<img onerror>`, or `<svg onload>` test vector buttons | Script does NOT execute. The payload is displayed purely as inert text data in the table and outcome banner. | Zero JavaScript execution; payload rendered through React text bindings as a safe text node. | **PASS** |
+| **TC-05** | XSS Prevention (`SecretProvisioningModule`) | Attempt to submit `<img src=x onerror=alert('XSS')>` in the service or identifier field | Input validation blocks submission due to dangerous HTML tags or invalid format. | Submission blocked with a validation error; no markup is rendered. | **PASS** |
 | **TC-06** | File Selection (`SecretProvisioningModule`) | Upload `malicious_script.exe` | File rejected; input cleared; unsupported extension error shown. | Rejected: *"Unsupported file extension (.exe). Only permitted formats: .json, .env, .pem, .key, .txt"* | **PASS** |
 | **TC-07** | File Selection (`SecretProvisioningModule`) | Upload oversized configuration file (60 KB) | File rejected; exceeds 50 KB maximum allowed size. | Rejected: *"File size (60.0 KB) exceeds the maximum allowed limit of 50 KB."* | **PASS** |
 | **TC-08** | File Selection (`SecretProvisioningModule`) | Upload valid configuration file `credentials.env` (68 bytes) | File accepted; success banner displayed; payload pre-populated. | Accepted: *"File validated successfully! Permitted type (.env) and size (0.07 KB) verified."* | **PASS** |
-| **TC-09** | Sensitive Storage (`secure-coding.ts`) | Inspect `localStorage` & `sessionStorage` for sensitive keys | Zero passwords, tokens, or private keys found in browser storage. | Clean: `auditAndCleanBrowserStorage()` purges any sensitive keys; returns 0 passwords stored. | **PASS** |
+| **TC-09** | Sensitive Storage (`secure-coding.ts`) | Inspect `localStorage` & `sessionStorage` on startup and after sign-out | Zero passwords or private keys remain in browser storage. | Clean: `auditAndCleanBrowserStorage()` scans backwards so every matching key is removed in one pass; non-sensitive preferences are preserved. | **PASS** |
 | **TC-10** | Logout Functionality (`RoleWorkspace`) | Click "Sign out" button | Active UI state, temporary provisioned secrets, and session storage cleared. | State reset to Overview; storage cleaned; user redirected to `/login/`. | **PASS** |
 | **TC-11** | Password Strength (`password_strength_helper.js`) | Input `"pass"` | Returns `{ strength: "Weak", score: 0 }` with criteria guidance. | Strength displayed as **Weak** (red badge + progress bar). | **PASS** |
 | **TC-12** | Password Strength (`password_strength_helper.js`) | Input `"Password12"` | Returns `{ strength: "Moderate", score: 2 }` recommending special symbols. | Strength displayed as **Moderate** (amber badge). | **PASS** |
@@ -199,11 +199,13 @@ npm run test:security
 ✔ Task 3: Permitted file extensions are accepted
 ✔ Task 3: Dangerous and unsupported file extensions are rejected
 ✔ Task 3: Files exceeding maximum size (50 KB) are strictly rejected
-✔ Task 4: Browser storage audit cleans any sensitive keys or passwords
+✔ Task 4: Browser storage audit cleans every sensitive key in one pass
+✔ Task 4: Blocked browser storage never breaks the storage audit
 ✔ Task 5: Evaluates Weak passwords and returns actionable feedback
 ✔ Task 5: Evaluates Moderate passwords and returns guidance
 ✔ Task 5: Evaluates Strong passwords with high entropy and complexity
 ✔ Task 5: Handles empty or invalid password inputs gracefully
+✔ Task 5: The typed wrapper delegates to the provided browser helper
 ✔ no identity, forged metadata, missing role, disabled role, DB errors and outages deny access
 ✔ verified role allows only its own workspace
 ✔ credentials are bounded, passwords preserved and prototype roles rejected
@@ -211,7 +213,7 @@ npm run test:security
 ✔ public API config rejects privileged keys and ambiguous endpoints while preserving legacy anon keys
 ✔ login redirects only after verified credentials and an active database assignment
 ✔ a password-only session cannot enter any protected role even with a valid membership
-✔ AAL2 alone cannot bypass factor approval or enabled session revocation
+✔ AAL2 cannot bypass an enabled session revocation check
 ✔ MFA action rejects foreign factors, unauthenticated users, malformed codes, and rate-limited attempts
 ✔ MFA accepts only an upgraded verified session; provider errors remain generic
 ✔ password-only requests cannot remove or replace an existing verified factor
@@ -229,9 +231,9 @@ npm run test:security
 ✔ vault actions reject absent auth, foreign ciphertext IDs and malformed inputs without plaintext disclosure
 ✔ vault reveal fails when durable authorization/audit RPC fails
 
-ℹ tests 40
+ℹ tests 42
 ℹ suites 0
-ℹ pass 40
+ℹ pass 42
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
@@ -241,19 +243,30 @@ npm run test:security
 
 ## 5. How to Run and Test in the Browser
 
-1. **Launch the Development Server:**
+1. **Configure the Authentication Environment:**
+   ```bash
+   cp .env.example .env.local
+   ```
+   Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `APP_ORIGIN`.
+   Apply `supabase/migrations/202611060001_workspace_members.sql` and assign the test account a role in `workspace_members`.
+2. **Launch the Development Server and Sign In:**
    ```bash
    npm run dev
    ```
-2. **Access the Application:**
-   - Open `http://localhost:3000` in any modern web browser.
-   - If running offline without Supabase, the login page displays direct links to launch the **Activity 5 Offline Workspaces**:
-     - *Team Lead Workspace (Hafiz Muhammad Rizwan)*: `http://localhost:3000/team-lead/`
-     - *Security Analyst Workspace (Zaid Hassan)*: `http://localhost:3000/security-analyst/`
+   - Open `http://localhost:3000/login/` and sign in with the configured Supabase account.
+   - Complete native TOTP enrollment/verification if prompted.
+   - Then open the role workspaces and the two Activity 5 modules:
+     - *Team Lead Workspace*: `http://localhost:3000/team-lead/`
+     - *Security Analyst Workspace*: `http://localhost:3000/security-analyst/`
      - *Developer Workspace*: `http://localhost:3000/developer/`
      - *Module 1 (Secret Provisioning)*: `http://localhost:3000/provision-secret/`
      - *Module 2 (Secrets Directory)*: `http://localhost:3000/secrets-directory/`
-3. **Interactive Demonstrations Available in the UI:**
+3. **Automated Verification Without Signing In:**
+   ```bash
+   npm run test:security
+   ```
+   This runs 47 tests, including the Activity 5 validation, XSS, file-selection, storage-audit, and password-helper tests plus the Activity 6 module backend action tests. The Activity 5 controls themselves are frontend-only; the protected workspaces still use the project's existing Supabase authentication.
+4. **Interactive Demonstrations Available in the UI:**
    - **Task 1 (Validation):** Try submitting empty or invalid inputs; see immediate inline validation feedback.
    - **Task 2 (XSS):** Click the one-click XSS test buttons (`<script>`, `<img>`, `<svg>`) in Module 1 and Module 2 to verify inert data rendering.
    - **Task 3 (File Selection):** Test uploading allowed (`.env`, `.json`), disallowed (`.exe`), and oversized (`>50KB`) files using the quick test buttons.

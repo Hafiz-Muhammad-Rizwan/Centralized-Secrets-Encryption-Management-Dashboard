@@ -175,45 +175,33 @@ export function auditAndCleanBrowserStorage(): {
     return { cleanedKeys, sensitiveFound: false };
   }
 
-  // Check and clean localStorage
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (!key) continue;
-      const val = localStorage.getItem(key) || "";
+  // Iterate backwards so removing an entry cannot skip the item that shifts
+  // into the current index. The getter is evaluated inside the try block
+  // because some privacy modes throw when `localStorage` is accessed at all.
+  const cleanStorage = (label: string, getStorage: () => Storage) => {
+    try {
+      const storage = getStorage();
+      for (let i = storage.length - 1; i >= 0; i--) {
+        const key = storage.key(i);
+        if (!key) continue;
+        const val = storage.getItem(key) || "";
 
-      const isSensitive = sensitivePatterns.some(
-        (pattern) => pattern.test(key) || pattern.test(val)
-      );
+        const isSensitive = sensitivePatterns.some(
+          (pattern) => pattern.test(key) || pattern.test(val)
+        );
 
-      if (isSensitive) {
-        localStorage.removeItem(key);
-        cleanedKeys.push(`localStorage:${key}`);
+        if (isSensitive) {
+          storage.removeItem(key);
+          cleanedKeys.push(`${label}:${key}`);
+        }
       }
+    } catch {
+      // Storage access might be restricted by browser policy.
     }
-  } catch {
-    // Storage access might be restricted by browser policy
-  }
+  };
 
-  // Check and clean sessionStorage
-  try {
-    for (let i = 0; i < sessionStorage.length; i++) {
-      const key = sessionStorage.key(i);
-      if (!key) continue;
-      const val = sessionStorage.getItem(key) || "";
-
-      const isSensitive = sensitivePatterns.some(
-        (pattern) => pattern.test(key) || pattern.test(val)
-      );
-
-      if (isSensitive) {
-        sessionStorage.removeItem(key);
-        cleanedKeys.push(`sessionStorage:${key}`);
-      }
-    }
-  } catch {
-    // Storage access might be restricted
-  }
+  cleanStorage("localStorage", () => localStorage);
+  cleanStorage("sessionStorage", () => sessionStorage);
 
   return {
     cleanedKeys,

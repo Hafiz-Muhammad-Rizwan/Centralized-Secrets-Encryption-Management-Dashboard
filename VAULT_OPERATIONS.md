@@ -15,9 +15,12 @@ server-side vault or account session controls are enabled.
    Independently verify that existing factors are legitimate: the migration
    grandfather-approves them to preserve existing logins.
 2. In a staging Supabase project, run the existing membership migration if not
-   already applied, then `supabase/migrations/202611070002_vault_security.sql`.
-   Do not run the original create-table migration twice. The new migration is
-   transactional; do not edit an already-applied migration to make future changes.
+   already applied, then `supabase/migrations/202611070002_vault_security.sql` and
+   `supabase/migrations/202611080003_module_backend.sql`. The second vault migration
+   adds the Activity 6 module metadata columns and the `vault_create_module`,
+   `vault_list_modules`, and `vault_rotate_module` RPCs. Do not run the original
+   create-table migration twice. Migrations are transactional; do not edit an
+   already-applied migration to make future changes.
 3. Verify the same migration against your Supabase version (it reads
    `auth.mfa_factors`). PostgreSQL fixture tests are not a live Supabase test.
    Keep `vault_private` OUT of the Data API exposed schemas. Never grant app roles

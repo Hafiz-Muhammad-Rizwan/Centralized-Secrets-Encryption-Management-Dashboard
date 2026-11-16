@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   ArrowRight,
   Check,
@@ -13,17 +13,17 @@ import {
   Hash,
   Info,
   LockKeyhole,
+  RefreshCw,
   RotateCcw,
   Server,
   ShieldAlert,
-  ShieldCheck,
   Sparkles,
   Upload,
 } from "lucide-react";
 import { SecretRecord } from "./secretsStore";
+import { provisionSecret, getRecentProvisions } from "@/app/provision-secret/actions";
 import { checkPasswordStrength } from "@/lib/security/password_strength_helper";
 import {
-  sanitizeText,
   validateFileSelection,
   ALLOWED_SECRET_EXTENSIONS,
   MAX_FILE_SIZE_BYTES,
@@ -61,6 +61,55 @@ export default function SecretProvisioningModule({
   const [recentlyProvisioned, setRecentlyProvisioned] = useState<SecretRecord | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showRecentValue, setShowRecentValue] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Activity 6 Task 2: Backend stored data retrieval
+  type BackendSummary = {
+    id: string;
+    name: string;
+    version: number;
+    updated_at: string;
+    secret_type: string;
+    environment: "PROD" | "STAGING" | "DEV";
+    service: string;
+    rotation_policy: string;
+    access_count: number;
+  };
+  const [recentDbSecrets, setRecentDbSecrets] = useState<BackendSummary[]>([]);
+  const [loadingRecent, setLoadingRecent] = useState<boolean>(true);
+  const [recentDbError, setRecentDbError] = useState<string>("");
+  const [reloadToken, setReloadToken] = useState<number>(0);
+
+  useEffect(() => {
+    let active = true;
+    getRecentProvisions(3)
+      .then((res) => {
+        if (!active) return;
+        if (res.data) {
+          setRecentDbSecrets(res.data as BackendSummary[]);
+          setRecentDbError("");
+        } else if (res.error) {
+          setRecentDbError(res.error);
+        }
+      })
+      .catch(() => {
+        if (!active) return;
+        setRecentDbError("Unable to retrieve stored secrets from database.");
+      })
+      .finally(() => {
+        if (active) setLoadingRecent(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [reloadToken]);
+
+  const loadRecentSecrets = () => {
+    setLoadingRecent(true);
+    setReloadToken((v) => v + 1);
+  };
+
+
 
   // XSS Defense Demonstration State (Task 2)
   const [xssTestMessage, setXssTestMessage] = useState<string>("");
@@ -189,8 +238,9 @@ export default function SecretProvisioningModule({
   };
 
   // Task 1: Secure Input Validation & Submission
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     const newErrors: string[] = [];
 
     // 1. Mandatory & Bounds Check: Secret Identifier
@@ -216,13 +266,13 @@ export default function SecretProvisioningModule({
 
     // 3. Mandatory & Bounds Check: Associated Service
     const trimmedService = service.trim();
-    const serviceRegex = /^[A-Za-z0-9\s._\-/]{3,100}$/;
+    const serviceRegex = /^[A-Za-z0-9 ._\-/&]{3,100}$/;
     if (!trimmedService) {
       newErrors.push("Associated Service Name is mandatory (e.g. Checkout API, Billing Service).");
     } else if (trimmedService.length < 3 || trimmedService.length > 100) {
       newErrors.push(`Associated Service Name must be between 3 and 100 characters (current: ${trimmedService.length}).`);
     } else if (!serviceRegex.test(trimmedService)) {
-      newErrors.push("Associated Service Name contains invalid characters. Use letters, numbers, spaces, dots, hyphens, and slashes only.");
+      newErrors.push("Associated Service Name contains invalid characters. Use letters, numbers, spaces, dots, hyphens, slashes, and ampersands only.");
     }
 
     // 4. XSS Guard check: reject script tags or dangerous javascript pseudo-protocols
@@ -236,45 +286,66 @@ export default function SecretProvisioningModule({
     }
 
     setErrors([]);
+    setSubmitting(true);
 
-    // Task 2 & 4: Sanitize text and handle sensitive information in memory only
-    const sanitizedName = sanitizeText(trimmedName);
-    const sanitizedService = sanitizeText(trimmedService);
-    const sanitizedPlainValue = sanitizeText(trimmedValue);
+    try {
+      // The plaintext is sent over HTTPS to a server action and encrypted with an
+      // envelope key before PostgreSQL receives it. Do not HTML-sanitize a secret
+      // payload: that would silently change the credential value. React renders
+      // the temporary local copy as text, not HTML.
+      const result = await provisionSecret({
+        name: trimmedName,
+        value: trimmedValue,
+        type,
+        env,
+        service: trimmedService,
+        rotationPolicy,
+      });
 
-    const newId = `sec_${crypto.randomUUID().slice(0, 8)}`;
-    const newFingerprint = `sha256:${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}...`;
+      if (result.error || !result.data) {
+        setErrors([
+          result.error || "The backend could not store this secret. Check the vault configuration and try again.",
+        ]);
+        return;
+      }
 
-    const newSecret: SecretRecord = {
-      id: newId,
-      name: sanitizedName,
-      type,
-      env,
-      service: sanitizedService,
-      lastRotated: "Just now",
-      accessCount: 1,
-      rotationPolicy,
-      algorithm: "AES-256-GCM (Simulated in memory)",
-      fingerprint: newFingerprint,
-      maskedValue: "••••••••••••••••",
-      plainValue: sanitizedPlainValue,
-      createdAt: new Date().toISOString().split("T")[0],
-      isNew: true,
-    };
+      const newSecret: SecretRecord = {
+        id: result.data.id,
+        name: result.data.name,
+        type,
+        env,
+        service: trimmedService,
+        lastRotated: "Just now",
+        accessCount: 0,
+        rotationPolicy,
+        algorithm: "AES-256-GCM envelope (server-side)",
+        fingerprint: "Stored server-side (not exposed)",
+        maskedValue: "••••••••••••••••",
+        plainValue: trimmedValue,
+        createdAt: new Date().toISOString(),
+        isNew: true,
+        version: result.data.version,
+      };
 
-    // Save into in-memory state (Task 4: Never stored in localStorage / sessionStorage)
-    onSecretAdded(newSecret);
-    setRecentlyProvisioned(newSecret);
-    onTriggerToast(`Secret '${sanitizedName}' securely validated and provisioned in memory.`);
+      onSecretAdded(newSecret);
+      setRecentlyProvisioned(newSecret);
+      setShowRecentValue(false);
+      onTriggerToast(`Secret '${newSecret.name}' encrypted and stored in the database.`);
+      loadRecentSecrets();
 
-    // Reset inputs
-    setName("");
-    setValue("DEMO_ONLY_NOT_A_CREDENTIAL");
-    setService("");
-    setSelectedFile(null);
-    setFileValidation(null);
-    setFileSuccess("");
-    setShowPassword(false);
+      // Reset inputs only after the backend confirms the insert.
+      setName("");
+      setValue("DEMO_ONLY_NOT_A_CREDENTIAL");
+      setService("");
+      setSelectedFile(null);
+      setFileValidation(null);
+      setFileSuccess("");
+      setShowPassword(false);
+    } catch {
+      setErrors(["The backend could not store this secret. Check your connection and try again."]);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleReset = () => {
@@ -302,14 +373,14 @@ export default function SecretProvisioningModule({
             Lead Developer: Hafiz Muhammad Rizwan
           </span>
           <span className="env amber" style={{ fontSize: "11px" }}>
-            Activity 5 — Secure Coding Implementation
+            Activity 6 — Database-backed module
           </span>
         </div>
         <h2 style={{ fontSize: "24px", fontWeight: "700", letterSpacing: "-0.5px", margin: "4px 0" }}>
           Secure Secret Provisioning &amp; Key Management
         </h2>
         <p style={{ color: "var(--muted)", fontSize: "13.5px", maxWidth: "680px" }}>
-          Provision cryptographic secrets with strict client-side input validation (Task 1), XSS prevention (Task 2), secure file selection (Task 3), sensitive memory isolation (Task 4), and live password strength evaluation (Task 5).
+          Provision cryptographic secrets with strict validation (Task 1), XSS prevention (Task 2), secure file selection (Task 3), sensitive memory isolation (Task 4), and live password strength evaluation (Task 5). Submissions are server-validated, encrypted, and inserted into the PostgreSQL vault through a role-gated server action.
         </p>
       </div>
 
@@ -551,16 +622,18 @@ export default function SecretProvisioningModule({
               <button
                 type="submit"
                 className="primary-button"
-                style={{ flex: 1, padding: "12px", display: "flex", justifyContent: "center", alignItems: "center", gap: "8px", fontWeight: "600" }}
+                disabled={submitting}
+                style={{ flex: 1, padding: "12px", display: "flex", justifyContent: "center", alignItems: "center", gap: "8px", fontWeight: "600", opacity: submitting ? 0.7 : 1 }}
               >
                 <LockKeyhole size={16} />
-                Provision &amp; Encrypt Secret
+                {submitting ? "Encrypting & storing…" : "Provision & Encrypt Secret"}
               </button>
               <button
                 type="button"
                 onClick={handleReset}
+                disabled={submitting}
                 className="filter-button"
-                style={{ padding: "0 16px", display: "flex", alignItems: "center", gap: "6px" }}
+                style={{ padding: "0 16px", display: "flex", alignItems: "center", gap: "6px", opacity: submitting ? 0.7 : 1 }}
                 title="Clear form"
               >
                 <RotateCcw size={14} />
@@ -834,6 +907,82 @@ export default function SecretProvisioningModule({
               </p>
             </div>
           )}
+
+          {/* Activity 6 Task 2: Backend Data Retrieval Display */}
+          <div
+            style={{
+              background: "rgba(255,255,255,0.02)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-lg)",
+              padding: "16px",
+              marginTop: "16px",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Server size={15} style={{ color: "var(--emerald)" }} />
+                <strong style={{ fontSize: "12.5px", color: "var(--text)" }}>Database Vault Stored Secrets</strong>
+              </div>
+              <button
+                type="button"
+                onClick={() => void loadRecentSecrets()}
+                disabled={loadingRecent}
+                className="filter-button"
+                style={{ padding: "4px 8px", fontSize: "11px", display: "flex", alignItems: "center", gap: "4px" }}
+                title="Refresh database records"
+              >
+                <RefreshCw size={12} className={loadingRecent ? "spin" : ""} />
+                {loadingRecent ? "Querying…" : "Refresh"}
+              </button>
+            </div>
+
+            {loadingRecent && recentDbSecrets.length === 0 ? (
+              <div style={{ fontSize: "11.5px", color: "var(--dim)", textAlign: "center", padding: "12px 0" }}>
+                Querying database vault records…
+              </div>
+            ) : recentDbError ? (
+              <div style={{ fontSize: "11.5px", color: "var(--crimson)", padding: "8px 12px", background: "rgba(239,68,68,0.08)", borderRadius: "var(--radius)" }}>
+                {recentDbError}
+              </div>
+            ) : recentDbSecrets.length === 0 ? (
+              <div style={{ fontSize: "11.5px", color: "var(--dim)", textAlign: "center", padding: "12px 0" }}>
+                No database records stored yet.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {recentDbSecrets.map((s) => (
+                  <div
+                    key={s.id}
+                    style={{
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "var(--radius)",
+                      padding: "8px 10px",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <div style={{ overflow: "hidden" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ fontSize: "12px", fontWeight: "600", color: "var(--text)" }}>{s.name}</span>
+                        <span className={`env ${s.environment === "PROD" ? "crimson" : s.environment === "STAGING" ? "amber" : "emerald"}`} style={{ fontSize: "9.5px", padding: "1px 5px" }}>
+                          {s.environment}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: "10.5px", color: "var(--dim)", display: "block" }}>
+                        {s.service || "No service"} • v{s.version} • {s.secret_type}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: "10px", fontFamily: "monospace", color: "var(--muted)", whiteSpace: "nowrap" }}>
+                      {new Date(s.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

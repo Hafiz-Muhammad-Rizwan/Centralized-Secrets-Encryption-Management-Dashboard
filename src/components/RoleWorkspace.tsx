@@ -37,7 +37,6 @@ import {
 import type { LucideIcon } from "lucide-react";
 import SecretProvisioningModule from "./SecretProvisioningModule";
 import SecretsDirectoryModule from "./SecretsDirectoryModule";
-import { loadSecrets, SecretRecord } from "./secretsStore";
 import { auditAndCleanBrowserStorage } from "@/lib/security/secure-coding";
 
 export type WorkspaceRole = "Team Lead" | "Developer" | "Security Analyst";
@@ -1002,38 +1001,40 @@ function OverviewContent({ role, content, onAction, onNavigate }: {
         ))}
       </div>
 
-      {/* ── PARALLEL MODULES SPOTLIGHT (ACTIVITY 3) ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>
-        <div
-          style={{
-            background: "linear-gradient(165deg, rgba(52,211,153,0.10), rgba(255,255,255,0.95))",
-            border: "1px solid rgba(52,211,153,0.25)",
-            borderRadius: "var(--radius-lg)",
-            padding: "20px",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "space-between",
-            gap: "14px",
-          }}
-        >
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-              <span className="env emerald" style={{ fontSize: "10.5px" }}>MODULE 1</span>
-              <span style={{ fontSize: "11px", color: "var(--muted)" }}>Hafiz Muhammad Rizwan</span>
-            </div>
-            <strong style={{ fontSize: "15px", display: "block", color: "var(--text)" }}>Secret Provisioning &amp; Vault</strong>
-            <p style={{ fontSize: "12.5px", color: "var(--muted)", margin: "4px 0 0" }}>
-              Create sample records in memory with basic input validation. No encryption is performed.
-            </p>
-          </div>
-          <button
-            onClick={() => onNavigate("Provision Secret")}
-            className="filter-button"
-            style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: "6px", color: "var(--emerald)", borderColor: "rgba(52,211,153,0.3)" }}
+      {/* ── PARALLEL MODULES SPOTLIGHT (ACTIVITY 3 / 6) ── */}
+      <div style={{ display: "grid", gridTemplateColumns: role === "Team Lead" ? "1fr 1fr" : "1fr", gap: "16px", marginBottom: "20px" }}>
+        {role === "Team Lead" && (
+          <div
+            style={{
+              background: "linear-gradient(165deg, rgba(52,211,153,0.10), rgba(255,255,255,0.95))",
+              border: "1px solid rgba(52,211,153,0.25)",
+              borderRadius: "var(--radius-lg)",
+              padding: "20px",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              gap: "14px",
+            }}
           >
-            Launch Module 1 <ArrowUpRight size={14} />
-          </button>
-        </div>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                <span className="env emerald" style={{ fontSize: "10.5px" }}>MODULE 1</span>
+                <span style={{ fontSize: "11px", color: "var(--muted)" }}>Hafiz Muhammad Rizwan</span>
+              </div>
+              <strong style={{ fontSize: "15px", display: "block", color: "var(--text)" }}>Secret Provisioning &amp; Vault</strong>
+              <p style={{ fontSize: "12.5px", color: "var(--muted)", margin: "4px 0 0" }}>
+                Validate, encrypt, and insert secrets into PostgreSQL through a role-gated server action with metadata persistence.
+              </p>
+            </div>
+            <button
+              onClick={() => onNavigate("Provision Secret")}
+              className="filter-button"
+              style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: "6px", color: "var(--emerald)", borderColor: "rgba(52,211,153,0.3)" }}
+            >
+              Launch Module 1 <ArrowUpRight size={14} />
+            </button>
+          </div>
+        )}
 
         <div
           style={{
@@ -1054,7 +1055,7 @@ function OverviewContent({ role, content, onAction, onNavigate }: {
             </div>
             <strong style={{ fontSize: "15px", display: "block", color: "var(--text)" }}>Secrets Directory &amp; Audit Explorer</strong>
             <p style={{ fontSize: "12.5px", color: "var(--muted)", margin: "4px 0 0" }}>
-              Explore sample records, filter by environment, and simulate reveals and rotations.
+              Retrieve authorized database records, filter by environment and type, reveal plaintext on demand, and rotate encryption safely.
             </p>
           </div>
           <button
@@ -1159,7 +1160,7 @@ export default function RoleWorkspace({ role, identity, initialTab = "Overview" 
   const reduceMotion = useReducedMotion();
   const router = useRouter();
   const [active, setActive] = useState(initialTab);
-  const [secrets, setSecrets] = useState<SecretRecord[]>(() => loadSecrets());
+  const [directoryRefreshKey, setDirectoryRefreshKey] = useState(0);
   const [toastMessage, setToastMessage] = useState<string>("Simulation updated; no server-side security action was performed.");
   const [showToast, setShowToast] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -1169,7 +1170,7 @@ export default function RoleWorkspace({ role, identity, initialTab = "Overview" 
     try {
       // Task 4: Clear application's temporary user-interface state & browser storage
       setActive("Overview");
-      setSecrets(loadSecrets());
+      setDirectoryRefreshKey(0);
       if (typeof window !== "undefined") {
         try {
           sessionStorage.clear();
@@ -1177,7 +1178,10 @@ export default function RoleWorkspace({ role, identity, initialTab = "Overview" 
         } catch {}
       }
       const result = await signOut();
-      if (result?.error) triggerToast(result.error);
+      if (result?.error) {
+        triggerToast(result.error);
+        router.replace("/login/");
+      }
     } catch {
       triggerToast("Sign-out completed. Clearing temporary state.");
       router.replace("/login/");
@@ -1204,11 +1208,27 @@ export default function RoleWorkspace({ role, identity, initialTab = "Overview" 
   /* Render the active sub-page */
   function renderPage() {
     if (active === "Provision Secret") {
+      if (role !== "Team Lead") {
+        return (
+          <div className="sub-page">
+            <span className="simulation-badge">RESTRICTED</span>
+            <h2>Team lead access required</h2>
+            <p style={{ color: "var(--muted)", fontSize: "13.5px", maxWidth: "640px" }}>
+              Secret provisioning is restricted to team leads by the database authorization policy. Your session can still view records you are authorized to read in the Secrets Directory.
+            </p>
+            <button
+              className="filter-button"
+              style={{ marginTop: "12px" }}
+              onClick={() => setActive("Secrets Directory")}
+            >
+              Open Secrets Directory
+            </button>
+          </div>
+        );
+      }
       return (
         <SecretProvisioningModule
-          onSecretAdded={(newSecret) => {
-            setSecrets((prev) => [newSecret, ...prev]);
-          }}
+          onSecretAdded={() => setDirectoryRefreshKey((value) => value + 1)}
           onNavigateToDirectory={() => setActive("Secrets Directory")}
           onTriggerToast={(msg) => triggerToast(msg)}
         />
@@ -1218,15 +1238,8 @@ export default function RoleWorkspace({ role, identity, initialTab = "Overview" 
     if (active === "Secrets Directory" || active === "Secrets inventory") {
       return (
         <SecretsDirectoryModule
-          secrets={secrets}
-          onRotateSecret={(id) => {
-            setSecrets((prev) => {
-              const updated = prev.map((s) =>
-                s.id === id ? { ...s, lastRotated: "Just now", accessCount: s.accessCount + 1 } : s
-              );
-              return updated;
-            });
-          }}
+          refreshKey={directoryRefreshKey}
+          canProvision={role === "Team Lead"}
           onNavigateToProvision={() => setActive("Provision Secret")}
           onTriggerToast={(msg) => triggerToast(msg)}
         />
@@ -1250,7 +1263,7 @@ export default function RoleWorkspace({ role, identity, initialTab = "Overview" 
     if (role === "Developer") {
       switch (active) {
         case "My active leases": return <MyActiveLeasesPage onAction={() => triggerToast()} />;
-        case "Request access": return <RequestAccessPage onSubmit={() => triggerToast()} />;
+        case "Request access": return <RequestAccessPage onSubmit={(detail) => triggerToast(detail)} />;
         case "Request history": return <RequestHistoryPage />;
         case "Security posture": return <SecurityPosturePage />;
       }

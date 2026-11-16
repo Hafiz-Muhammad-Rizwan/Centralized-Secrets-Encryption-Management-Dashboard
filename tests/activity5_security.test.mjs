@@ -15,7 +15,15 @@ function loadTs(path) {
 }
 
 const secureCoding = loadTs('src/lib/security/secure-coding.ts');
-const passwordHelper = loadTs('src/lib/security/password_strength_helper.ts');
+
+function loadProvidedPasswordHelper() {
+  const code = readFileSync('public/password_strength_helper.js', 'utf8');
+  const context = { exports: {}, globalThis: {} };
+  vm.runInNewContext(code, context);
+  return context.globalThis.checkPasswordStrength;
+}
+
+const checkPasswordStrength = loadProvidedPasswordHelper();
 
 /* ═══════════════════════════════════════════════════════════════
    TASK 1: SECURE INPUT VALIDATION TESTS
@@ -133,23 +141,29 @@ test('Task 3: Files exceeding maximum size (50 KB) are strictly rejected', () =>
    TASK 4: SENSITIVE INFORMATION HANDLING TESTS
    ═══════════════════════════════════════════════════════════════ */
 
-test('Task 4: Browser storage audit cleans any sensitive keys or passwords', () => {
-  const storageMap = new Map();
-  storageMap.set('theme', 'dark');
-  storageMap.set('user_password', 'PlainTextSecret123');
-  storageMap.set('auth_token_key', 'raw-token-abc');
+test('Task 4: Browser storage audit cleans every sensitive key in one pass', () => {
+  const localMap = new Map([
+    ['theme', 'dark'],
+    ['user_password', 'PlainTextSecret123'],
+    ['private_key_pem', '-----BEGIN PRIVATE KEY-----'],
+  ]);
+  const sessionMap = new Map([
+    ['selected_tab', 'overview'],
+    ['session_password', 'TemporarySecret123'],
+    ['secret_plain_value', 'raw-secret'],
+  ]);
 
-  const mockStorage = {
-    get length() { return storageMap.size; },
-    key(i) { return Array.from(storageMap.keys())[i]; },
-    getItem(k) { return storageMap.get(k); },
-    removeItem(k) { storageMap.delete(k); },
-  };
+  const mockStorage = (map) => ({
+    get length() { return map.size; },
+    key(i) { return Array.from(map.keys())[i]; },
+    getItem(k) { return map.get(k); },
+    removeItem(k) { map.delete(k); },
+  });
 
   const context = {
     window: {},
-    localStorage: mockStorage,
-    sessionStorage: mockStorage,
+    localStorage: mockStorage(localMap),
+    sessionStorage: mockStorage(sessionMap),
     exports: {},
     require() { return {}; },
   };
@@ -161,8 +175,36 @@ test('Task 4: Browser storage audit cleans any sensitive keys or passwords', () 
 
   const auditResult = context.exports.auditAndCleanBrowserStorage();
   assert.equal(auditResult.sensitiveFound, true);
-  assert.equal(storageMap.has('user_password'), false);
-  assert.equal(storageMap.has('theme'), true); // Non-sensitive preferences preserved
+  assert.equal(auditResult.cleanedKeys.length, 4);
+  assert.equal(localMap.has('user_password'), false);
+  assert.equal(localMap.has('private_key_pem'), false);
+  assert.equal(sessionMap.has('session_password'), false);
+  assert.equal(sessionMap.has('secret_plain_value'), false);
+  assert.equal(localMap.has('theme'), true); // Non-sensitive preferences preserved
+  assert.equal(sessionMap.has('selected_tab'), true);
+});
+
+test('Task 4: Blocked browser storage never breaks the storage audit', () => {
+  const context = {
+    window: {},
+    exports: {},
+    require() { return {}; },
+  };
+  Object.defineProperty(context, 'localStorage', {
+    get() { throw new Error('blocked by browser policy'); },
+  });
+  Object.defineProperty(context, 'sessionStorage', {
+    get() { throw new Error('blocked by browser policy'); },
+  });
+
+  const code = ts.transpileModule(readFileSync('src/lib/security/secure-coding.ts', 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  vm.runInNewContext(code, context);
+
+  const result = context.exports.auditAndCleanBrowserStorage();
+  assert.equal(result.sensitiveFound, false);
+  assert.equal(result.cleanedKeys.length, 0);
 });
 
 /* ═══════════════════════════════════════════════════════════════
@@ -170,28 +212,39 @@ test('Task 4: Browser storage audit cleans any sensitive keys or passwords', () 
    ═══════════════════════════════════════════════════════════════ */
 
 test('Task 5: Evaluates Weak passwords and returns actionable feedback', () => {
-  const result = passwordHelper.checkPasswordStrength('pass');
+  const result = checkPasswordStrength('pass');
   assert.equal(result.strength, 'Weak');
   assert.ok(result.score <= 1);
   assert.match(result.feedback, /at least 8 characters/i);
 });
 
 test('Task 5: Evaluates Moderate passwords and returns guidance', () => {
-  const result = passwordHelper.checkPasswordStrength('Password12');
+  const result = checkPasswordStrength('Password12');
   assert.equal(result.strength, 'Moderate');
   assert.ok(result.score >= 2);
   assert.match(result.feedback, /special symbol/i);
 });
 
 test('Task 5: Evaluates Strong passwords with high entropy and complexity', () => {
-  const result = passwordHelper.checkPasswordStrength('Vault#2026!SecureKey');
+  const result = checkPasswordStrength('Vault#2026!SecureKey');
   assert.equal(result.strength, 'Strong');
   assert.ok(result.score >= 4);
   assert.match(result.feedback, /Strong password! Meets complexity/i);
 });
 
 test('Task 5: Handles empty or invalid password inputs gracefully', () => {
-  const result = passwordHelper.checkPasswordStrength('');
+  const result = checkPasswordStrength('');
   assert.equal(result.strength, 'Weak');
   assert.match(result.feedback, /cannot be empty/i);
+});
+
+test('Task 5: The typed wrapper delegates to the provided browser helper', () => {
+  const fakeWindow = { checkPasswordStrength: (password) => checkPasswordStrength(password) };
+  const code = readFileSync('src/lib/security/password_strength_helper.ts', 'utf8');
+  const compiled = ts.transpileModule(code, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const context = { exports: {}, window: fakeWindow, require() { return {}; } };
+  vm.runInNewContext(compiled, context);
+  assert.equal(context.exports.checkPasswordStrength('Vault#2026!SecureKey').strength, 'Strong');
 });

@@ -2,8 +2,10 @@
 
 Next.js server application with Supabase email/password authentication, native
 TOTP two-factor authentication, role checks, and a server-side encrypted vault. The
-original role dashboards remain explicitly labelled simulations; they are separate
-from real `/vault/`, `/account/` and `/audit/` pages.
+original role dashboards remain explicitly labelled simulations for metrics and
+approval workflows. The two Activity 3 modules embedded in those dashboards —
+**Secret Provisioning** and **Secrets Directory** — use the real PostgreSQL vault
+when the backend is enabled; they do not fall back to sample secrets.
 
 **New code is not a deployed or certified production vault.** Follow
 [VAULT_OPERATIONS.md](VAULT_OPERATIONS.md) before deploying. Apply the membership
@@ -31,8 +33,10 @@ npm start
 
 Apply `supabase/migrations/202611060001_workspace_members.sql` once in the
 Supabase SQL Editor, then insert an active role for each account
-(`team_lead`, `developer`, or `security_analyst`). See
-[SUPABASE_AUTH_SETUP.md](SUPABASE_AUTH_SETUP.md).
+(`team_lead`, `developer`, or `security_analyst`). To enable the encrypted vault and
+the database-backed modules, apply `202611070002_vault_security.sql` followed by
+`202611080003_module_backend.sql`. See [SUPABASE_AUTH_SETUP.md](SUPABASE_AUTH_SETUP.md)
+and [ACTIVITY_6_BACKEND_MODULES.md](ACTIVITY_6_BACKEND_MODULES.md).
 
 CI additionally runs isolated PostgreSQL authorization tests, scans dependencies,
 and produces an SBOM. Do not execute `tests/sql/` against a live project.

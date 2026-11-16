@@ -38,6 +38,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f tests/sql/bootstrap.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/202611060001_workspace_members.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/202611070002_vault_security.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/202611080003_module_backend.sql
           psql -v ON_ERROR_STOP=1 -f tests/sql/vault-security.sql
       - run: npm run test:security
       - run: npx eslint src scripts tests next.config.ts
