@@ -16,7 +16,6 @@ import {
   RotateCcw,
   Server,
   ShieldAlert,
-  ShieldCheck,
   Sparkles,
   Upload,
 } from "lucide-react";

@@ -12,12 +12,10 @@ import {
   Plus,
   RefreshCw,
   Search,
-  ShieldAlert,
   ShieldCheck,
   X,
 } from "lucide-react";
 import { SecretRecord } from "./secretsStore";
-import { sanitizeText } from "@/lib/security/secure-coding";
 
 interface SecretsDirectoryProps {
   secrets: SecretRecord[];

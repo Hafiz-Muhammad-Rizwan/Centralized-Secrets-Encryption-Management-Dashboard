@@ -3,14 +3,18 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { clearLegacySecrets } from "./secretsStore";
+import { auditAndCleanBrowserStorage } from "@/lib/security/secure-coding";
 
 export default function DemoNotice() {
   const pathname = usePathname();
   const realPage = ["/vault", "/account", "/audit", "/mfa", "/login"].some(p => pathname.startsWith(p));
   const [cleanupFailed, setCleanupFailed] = useState(false);
   useEffect(() => {
-    const cleaned = clearLegacySecrets();
-    const timer = setTimeout(() => setCleanupFailed(!cleaned), 0);
+    const legacyCleaned = clearLegacySecrets();
+    // Task 4: purge any sensitive values that may have been left in browser
+    // storage by an older build before this session begins.
+    auditAndCleanBrowserStorage();
+    const timer = setTimeout(() => setCleanupFailed(!legacyCleaned), 0);
     return () => clearTimeout(timer);
   }, []);
   return (

@@ -1177,7 +1177,10 @@ export default function RoleWorkspace({ role, identity, initialTab = "Overview" 
         } catch {}
       }
       const result = await signOut();
-      if (result?.error) triggerToast(result.error);
+      if (result?.error) {
+        triggerToast(result.error);
+        router.replace("/login/");
+      }
     } catch {
       triggerToast("Sign-out completed. Clearing temporary state.");
       router.replace("/login/");
@@ -1250,7 +1253,7 @@ export default function RoleWorkspace({ role, identity, initialTab = "Overview" 
     if (role === "Developer") {
       switch (active) {
         case "My active leases": return <MyActiveLeasesPage onAction={() => triggerToast()} />;
-        case "Request access": return <RequestAccessPage onSubmit={() => triggerToast()} />;
+        case "Request access": return <RequestAccessPage onSubmit={(detail) => triggerToast(detail)} />;
         case "Request history": return <RequestHistoryPage />;
         case "Security posture": return <SecurityPosturePage />;
       }
