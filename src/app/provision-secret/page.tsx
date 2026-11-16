@@ -1,6 +1,7 @@
-import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/access";
-export default async function Page() {
-  await requireRole("team_lead");
-  redirect("/vault/");
+import RoleWorkspace from "@/components/RoleWorkspace";
+
+export default async function ProvisionSecretPage() {
+  const access = await requireRole("team_lead");
+  return <RoleWorkspace identity={access.email} role="Team Lead" initialTab="Provision Secret" />;
 }
