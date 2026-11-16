@@ -14,7 +14,7 @@
 
 The objective of Project Activity 5 is to evaluate our existing semester project (**Vaultline — Centralized Secrets Encryption Management Dashboard**), identify potential security weaknesses across client-side components, implement standard secure coding practices directly into the source code, and verify their effectiveness through structured testing and demonstration.
 
-All security enhancements have been implemented in the active project codebase and verified with an automated security test suite comprising **42 passing tests** (`node --test tests/*.test.mjs`).
+All security enhancements have been implemented in the active project codebase and verified with an automated security test suite comprising **47 passing tests** (`node --test tests/*.test.mjs`).
 
 ---
 
@@ -265,7 +265,7 @@ npm run test:security
    ```bash
    npm run test:security
    ```
-   This runs 42 tests, including the Activity 5 validation, XSS, file-selection, storage-audit, and password-helper tests. The Activity 5 controls themselves are frontend-only; the protected workspaces still use the project's existing Supabase authentication.
+   This runs 47 tests, including the Activity 5 validation, XSS, file-selection, storage-audit, and password-helper tests plus the Activity 6 module backend action tests. The Activity 5 controls themselves are frontend-only; the protected workspaces still use the project's existing Supabase authentication.
 4. **Interactive Demonstrations Available in the UI:**
    - **Task 1 (Validation):** Try submitting empty or invalid inputs; see immediate inline validation feedback.
    - **Task 2 (XSS):** Click the one-click XSS test buttons (`<script>`, `<img>`, `<svg>`) in Module 1 and Module 2 to verify inert data rendering.

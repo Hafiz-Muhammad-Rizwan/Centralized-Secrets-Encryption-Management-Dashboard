@@ -13,6 +13,8 @@ export interface SecretRecord {
   plainValue: string;
   createdAt: string;
   isNew?: boolean;
+  version?: number;
+  ownerId?: string;
 }
 
 export const INITIAL_SECRETS: SecretRecord[] = [

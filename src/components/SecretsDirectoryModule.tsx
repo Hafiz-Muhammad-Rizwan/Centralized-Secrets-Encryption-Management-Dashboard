@@ -13,20 +13,61 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  Trash2,
   X,
 } from "lucide-react";
 import { SecretRecord } from "./secretsStore";
+import { listSecrets, revealSecret, rotateSecret, deleteSecret } from "@/app/secrets-directory/actions";
+
+type BackendSecretRow = {
+  id: string;
+  name: string;
+  owner_id: string;
+  version: number;
+  updated_at: string;
+  secret_type: string;
+  environment: "PROD" | "STAGING" | "DEV";
+  service: string;
+  rotation_policy: string;
+  access_count: number;
+};
+
+function formatTimestamp(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function toSecretRecord(row: BackendSecretRow): SecretRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    type: row.secret_type,
+    env: row.environment,
+    service: row.service || "—",
+    lastRotated: formatTimestamp(row.updated_at),
+    accessCount: row.access_count,
+    rotationPolicy: row.rotation_policy,
+    algorithm: "AES-256-GCM envelope (server-side)",
+    fingerprint: "Stored server-side (not exposed)",
+    maskedValue: "••••••••••••••••",
+    plainValue: "",
+    createdAt: row.updated_at,
+    isNew: false,
+    version: row.version,
+    ownerId: row.owner_id,
+  };
+}
 
 interface SecretsDirectoryProps {
-  secrets: SecretRecord[];
-  onRotateSecret: (secretId: string) => void;
+  refreshKey?: number;
+  canProvision?: boolean;
   onNavigateToProvision: () => void;
   onTriggerToast: (msg: string) => void;
 }
 
 export default function SecretsDirectoryModule({
-  secrets,
-  onRotateSecret,
+  refreshKey = 0,
+  canProvision = true,
   onNavigateToProvision,
   onTriggerToast,
 }: SecretsDirectoryProps) {
@@ -35,12 +76,50 @@ export default function SecretsDirectoryModule({
   const [selectedEnv, setSelectedEnv] = useState<"ALL" | "PROD" | "STAGING" | "DEV">("ALL");
   const [selectedType, setSelectedType] = useState<string>("ALL");
 
+  // Backend data state (Activity 6 Task 2)
+  const [backendSecrets, setBackendSecrets] = useState<SecretRecord[]>([]);
+  const [backendLoading, setBackendLoading] = useState(true);
+  const [backendError, setBackendError] = useState("");
+  const [reloadToken, setReloadToken] = useState(0);
+
   // Inspection modal state (Task 4: sensitive handling with 10s auto-masking)
   const [inspectingSecret, setInspectingSecret] = useState<SecretRecord | null>(null);
   const [isRevealed, setIsRevealed] = useState(false);
+  const [revealedValue, setRevealedValue] = useState("");
   const [revealCountdown, setRevealCountdown] = useState<number | null>(null);
+  const [revealing, setRevealing] = useState(false);
+  const [rotatingId, setRotatingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
   const [copiedFingerprint, setCopiedFingerprint] = useState(false);
+
+  // Load visible records from the backend. There is deliberately no mock fallback.
+  useEffect(() => {
+    let active = true;
+    listSecrets()
+      .then((result) => {
+        if (!active) return;
+        if (result.error || !result.data) {
+          setBackendSecrets([]);
+          setBackendError(result.error || "Secrets could not be loaded from the backend.");
+          return;
+        }
+        setBackendError("");
+        setBackendSecrets(result.data.map(toSecretRecord));
+      })
+      .catch(() => {
+        if (!active) return;
+        setBackendSecrets([]);
+        setBackendError("Secrets could not be loaded from the backend.");
+      })
+      .finally(() => {
+        if (active) setBackendLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [refreshKey, reloadToken]);
 
   // Task 2: XSS Defense Demonstration State
   const [xssTestVector, setXssTestVector] = useState<string>("");
@@ -48,7 +127,7 @@ export default function SecretsDirectoryModule({
 
   // Auto-masking timer effect
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setTimeout>;
     if (isRevealed && revealCountdown !== null) {
       if (revealCountdown > 0) {
         timer = setTimeout(() => {
@@ -58,6 +137,7 @@ export default function SecretsDirectoryModule({
         timer = setTimeout(() => {
           setIsRevealed(false);
           setRevealCountdown(null);
+          setRevealedValue("");
           onTriggerToast("Secret payload auto-masked for security.");
         }, 0);
       }
@@ -65,25 +145,121 @@ export default function SecretsDirectoryModule({
     return () => clearTimeout(timer);
   }, [isRevealed, revealCountdown, onTriggerToast]);
 
-  // Handle reveal click with security timer
-  const handleToggleReveal = () => {
+  const closeInspection = () => {
+    setInspectingSecret(null);
+    setIsRevealed(false);
+    setRevealCountdown(null);
+    setRevealedValue("");
+    setConfirmDelete(false);
+  };
+
+  // Reveal only on demand. The list endpoint never returns plaintext.
+  const handleToggleReveal = async () => {
     if (isRevealed) {
       setIsRevealed(false);
       setRevealCountdown(null);
-    } else {
+      setRevealedValue("");
+      return;
+    }
+    if (!inspectingSecret) return;
+
+    if (inspectingSecret.id === "sec_xss_test") {
+      setRevealedValue(inspectingSecret.plainValue);
       setIsRevealed(true);
       setRevealCountdown(10);
-      onTriggerToast("Plaintext displayed with 10s auto-masking timer.");
+      onTriggerToast("Test vector displayed as plain text with a 10s auto-masking timer.");
+      return;
+    }
+
+    setRevealing(true);
+    try {
+      const result = await revealSecret(inspectingSecret.id);
+      if (result.error || typeof result.value !== "string") {
+        onTriggerToast(result.error || "Unable to reveal this secret.");
+        return;
+      }
+      setRevealedValue(result.value);
+      setIsRevealed(true);
+      setRevealCountdown(10);
+      onTriggerToast("Plaintext decrypted from the vault with a 10s auto-masking timer.");
+    } catch {
+      onTriggerToast("Unable to reveal this secret.");
+    } finally {
+      setRevealing(false);
     }
   };
 
-  // Combine real secrets with any active XSS test vector for live demonstration
+  const handleRotateSecret = async (secret: SecretRecord) => {
+    if (secret.id === "sec_xss_test") {
+      setXssSimulatedSecret((current) =>
+        current
+          ? { ...current, lastRotated: "Just now", accessCount: current.accessCount + 1 }
+          : current,
+      );
+      onTriggerToast("Test record updated locally; no database rotation was performed.");
+      return;
+    }
+    if (typeof secret.version !== "number") {
+      onTriggerToast("This record has no backend version and cannot be rotated.");
+      return;
+    }
+    setRotatingId(secret.id);
+    try {
+      const result = await rotateSecret(secret.id, secret.version);
+      if (result.error) {
+        onTriggerToast(result.error);
+        return;
+      }
+      onTriggerToast(result.message || "Secret re-encrypted and rotated in the database.");
+      setBackendLoading(true);
+      setBackendError("");
+      setReloadToken((value) => value + 1);
+      closeInspection();
+    } catch {
+      onTriggerToast("Unable to rotate this secret.");
+    } finally {
+      setRotatingId(null);
+    }
+  };
+
+  const handleDeleteSecret = async (secret: SecretRecord) => {
+    if (secret.id === "sec_xss_test") {
+      setXssSimulatedSecret(null);
+      onTriggerToast("Test vector removed from local state.");
+      closeInspection();
+      return;
+    }
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    setDeletingId(secret.id);
+    try {
+      const result = await deleteSecret(secret.id);
+      if (result.error) {
+        onTriggerToast(result.error);
+        return;
+      }
+      onTriggerToast(result.message || "Secret deleted from database.");
+      setBackendLoading(true);
+      setBackendError("");
+      setReloadToken((value) => value + 1);
+      closeInspection();
+    } catch {
+      onTriggerToast("Unable to delete this secret.");
+    } finally {
+      setDeletingId(null);
+      setConfirmDelete(false);
+    }
+  };
+
+  // Combine backend records with any active XSS test vector for live demonstration.
   const allDisplaySecrets = useMemo(() => {
     if (xssSimulatedSecret) {
-      return [xssSimulatedSecret, ...secrets];
+      return [xssSimulatedSecret, ...backendSecrets];
     }
-    return secrets;
-  }, [secrets, xssSimulatedSecret]);
+    return backendSecrets;
+  }, [backendSecrets, xssSimulatedSecret]);
 
   // Filtered secrets computation (Task 1: trim query, enforce max length 100)
   const filteredSecrets = useMemo(() => {
@@ -185,27 +361,47 @@ export default function SecretsDirectoryModule({
                 Lead Developer: Zaid Hassan
               </span>
               <span className="env amber" style={{ fontSize: "11px" }}>
-                Activity 5 — Secure Coding Implementation
+                Activity 6 — Database-backed module
               </span>
             </div>
             <h2 style={{ fontSize: "24px", fontWeight: "700", letterSpacing: "-0.5px", margin: "4px 0" }}>
               Centralized Secrets Directory &amp; Audit Explorer
             </h2>
             <p style={{ color: "var(--muted)", fontSize: "13.5px", maxWidth: "680px" }}>
-              Search and inspect vault credentials with active XSS prevention (Task 2), bounded search input validation (Task 1), and sensitive data protection with 10-second auto-masking (Task 4).
+              Load authorized vault records from PostgreSQL, filter by environment and classification, and reveal plaintext or rotate encryption on demand. Includes XSS prevention (Task 2), bounded search validation (Task 1), and 10-second auto-masking (Task 4).
             </p>
           </div>
 
-          <button
-            onClick={onNavigateToProvision}
-            className="primary-button"
-            style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 18px", fontWeight: "600" }}
-          >
-            <Plus size={16} />
-            Provision New Secret
-          </button>
+          {canProvision && (
+            <button
+              onClick={onNavigateToProvision}
+              className="primary-button"
+              style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 18px", fontWeight: "600" }}
+            >
+              <Plus size={16} />
+              Provision New Secret
+            </button>
+          )}
         </div>
       </div>
+
+      {backendError && (
+        <div
+          role="alert"
+          style={{
+            background: "rgba(248, 113, 113, 0.1)",
+            border: "1px solid rgba(248, 113, 113, 0.35)",
+            borderRadius: "var(--radius)",
+            padding: "12px 16px",
+            marginBottom: "20px",
+            fontSize: "12.5px",
+            color: "var(--crimson)",
+          }}
+        >
+          <strong>Secrets backend unavailable.</strong> {backendError} No sample data is substituted.
+          Confirm the vault migration, server encryption key, and your authorized role.
+        </div>
+      )}
 
       {/* Task 2: Cross-Site Scripting (XSS) Prevention Verification Card */}
       <div
@@ -366,7 +562,21 @@ export default function SecretsDirectoryModule({
         </div>
 
         {/* Environment Filter Buttons */}
-        <div className="action-bar-right" style={{ display: "flex", gap: "6px" }}>
+        <div className="action-bar-right" style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+          <button
+            className="filter-button"
+            onClick={() => {
+              setBackendLoading(true);
+              setBackendError("");
+              setReloadToken((value) => value + 1);
+            }}
+            disabled={backendLoading}
+            title="Reload secrets from PostgreSQL"
+            style={{ display: "flex", alignItems: "center", gap: "5px", opacity: backendLoading ? 0.7 : 1 }}
+          >
+            <RefreshCw size={13} />
+            {backendLoading ? "Loading…" : "Refresh"}
+          </button>
           <button
             className={`filter-button ${selectedEnv === "ALL" ? "active" : ""}`}
             onClick={() => setSelectedEnv("ALL")}
@@ -395,7 +605,31 @@ export default function SecretsDirectoryModule({
       </div>
 
       {/* Secrets Data Table */}
-      {filteredSecrets.length > 0 ? (
+      {backendLoading ? (
+        <div
+          style={{
+            background: "rgba(255,255,255,0.015)",
+            border: "1px dashed var(--border-strong)",
+            borderRadius: "var(--radius-lg)",
+            padding: "48px 24px",
+            textAlign: "center",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "12px",
+          }}
+        >
+          <RefreshCw size={28} style={{ color: "var(--blue)" }} />
+          <div>
+            <strong style={{ fontSize: "14px", display: "block", color: "var(--text)" }}>
+              Loading secrets from the encrypted vault…
+            </strong>
+            <p style={{ fontSize: "12.5px", color: "var(--dim)", margin: "4px 0 0" }}>
+              Requesting authorized records from PostgreSQL.
+            </p>
+          </div>
+        </div>
+      ) : filteredSecrets.length > 0 ? (
         <div className="data-table">
           <div className="data-table-head cols-6">
             <span>Secret / Service</span>
@@ -477,6 +711,7 @@ export default function SecretsDirectoryModule({
                     setInspectingSecret(secret);
                     setIsRevealed(false);
                     setRevealCountdown(null);
+                    setRevealedValue("");
                   }}
                   className="filter-button"
                   style={{ padding: "4px 10px", fontSize: "11.5px", display: "flex", alignItems: "center", gap: "5px" }}
@@ -485,15 +720,13 @@ export default function SecretsDirectoryModule({
                   Inspect
                 </button>
                 <button
-                  onClick={() => {
-                    onRotateSecret(secret.id);
-                    onTriggerToast(`Rotation initiated for '${secret.name}'.`);
-                  }}
+                  onClick={() => void handleRotateSecret(secret)}
+                  disabled={rotatingId === secret.id}
                   className="filter-button"
-                  style={{ padding: "4px 10px", fontSize: "11.5px", display: "flex", alignItems: "center", gap: "5px", color: "var(--emerald)" }}
+                  style={{ padding: "4px 10px", fontSize: "11.5px", display: "flex", alignItems: "center", gap: "5px", color: "var(--emerald)", opacity: rotatingId === secret.id ? 0.7 : 1 }}
                 >
                   <RefreshCw size={13} />
-                  Rotate
+                  {rotatingId === secret.id ? "Rotating…" : "Rotate"}
                 </button>
               </div>
             </div>
@@ -515,9 +748,13 @@ export default function SecretsDirectoryModule({
         >
           <AlertTriangle size={28} style={{ color: "var(--amber)" }} />
           <div>
-            <strong style={{ fontSize: "14px", display: "block", color: "var(--text)" }}>No Matching Secrets Found</strong>
+            <strong style={{ fontSize: "14px", display: "block", color: "var(--text)" }}>
+              {backendError ? "No Authorized Secrets Available" : "No Matching Secrets Found"}
+            </strong>
             <p style={{ fontSize: "12.5px", color: "var(--dim)", margin: "4px 0 0", maxWidth: "420px" }}>
-              No secrets match your query &quot;{searchQuery || selectedEnv || selectedType}&quot;. Try adjusting your filters or provision a new secret.
+              {backendError
+                ? "The backend returned no visible records. Check the vault configuration and your account’s database grants."
+                : `No secrets match your query "${searchQuery || selectedEnv || selectedType}". Try adjusting your filters or provision a new secret.`}
             </p>
           </div>
           <button
@@ -535,9 +772,7 @@ export default function SecretsDirectoryModule({
         <div
           className="modal-backdrop"
           onClick={() => {
-            setInspectingSecret(null);
-            setIsRevealed(false);
-            setRevealCountdown(null);
+            closeInspection();
           }}
         >
           <div
@@ -561,11 +796,7 @@ export default function SecretsDirectoryModule({
               </div>
               <button
                 className="close-button"
-                onClick={() => {
-                  setInspectingSecret(null);
-                  setIsRevealed(false);
-                  setRevealCountdown(null);
-                }}
+                onClick={closeInspection}
               >
                 <X size={18} />
               </button>
@@ -639,45 +870,68 @@ export default function SecretsDirectoryModule({
                       </span>
                     )}
                     <button
-                      onClick={handleToggleReveal}
+                      onClick={() => void handleToggleReveal()}
+                      disabled={revealing}
                       className="filter-button"
-                      style={{ padding: "4px 10px", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", color: isRevealed ? "var(--amber)" : "var(--emerald)" }}
+                      style={{ padding: "4px 10px", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", color: isRevealed ? "var(--amber)" : "var(--emerald)", opacity: revealing ? 0.7 : 1 }}
                     >
                       {isRevealed ? <EyeOff size={13} /> : <Eye size={13} />}
-                      {isRevealed ? "Hide Value" : "Reveal Payload"}
+                      {revealing ? "Decrypting…" : isRevealed ? "Hide Value" : "Reveal Payload"}
                     </button>
                   </div>
                 </div>
                 <div style={{ fontFamily: "monospace", fontSize: "12.5px", color: isRevealed ? "var(--emerald)" : "var(--dim)", wordBreak: "break-all" }}>
-                  {isRevealed ? inspectingSecret.plainValue : "••••••••••••••••••••••••••••••••"}
+                  {isRevealed ? revealedValue : "••••••••••••••••••••••••••••••••"}
                 </div>
               </div>
             </div>
 
             {/* Modal Actions */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "20px", paddingTop: "16px", borderTop: "1px solid var(--border)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "20px", paddingTop: "16px", borderTop: "1px solid var(--border)", flexWrap: "wrap", gap: "10px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <button
+                  onClick={() => void handleRotateSecret(inspectingSecret)}
+                  disabled={rotatingId === inspectingSecret.id || deletingId === inspectingSecret.id}
+                  className="filter-button"
+                  style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--emerald)", borderColor: "rgba(52,211,153,0.3)", opacity: rotatingId === inspectingSecret.id ? 0.7 : 1 }}
+                >
+                  <RefreshCw size={13} />
+                  {rotatingId === inspectingSecret.id ? "Rotating…" : "Rotate Secret Now"}
+                </button>
+                <button
+                  onClick={() => void handleDeleteSecret(inspectingSecret)}
+                  disabled={deletingId === inspectingSecret.id || rotatingId === inspectingSecret.id}
+                  className="filter-button"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    color: "var(--crimson)",
+                    borderColor: confirmDelete ? "var(--crimson)" : "rgba(239,68,68,0.3)",
+                    background: confirmDelete ? "rgba(239,68,68,0.15)" : "transparent",
+                    opacity: deletingId === inspectingSecret.id ? 0.7 : 1,
+                  }}
+                  title="Permanently remove this secret from the database"
+                >
+                  <Trash2 size={13} />
+                  {deletingId === inspectingSecret.id
+                    ? "Deleting…"
+                    : confirmDelete
+                    ? "Confirm Delete?"
+                    : "Delete"}
+                </button>
+                {confirmDelete && (
+                  <button
+                    onClick={() => setConfirmDelete(false)}
+                    className="filter-button"
+                    style={{ fontSize: "11px", padding: "4px 8px" }}
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
               <button
-                onClick={() => {
-                  onRotateSecret(inspectingSecret.id);
-                  onTriggerToast(`Rotated secret '${inspectingSecret.name}'.`);
-                  setInspectingSecret({
-                    ...inspectingSecret,
-                    lastRotated: "Just now",
-                    accessCount: inspectingSecret.accessCount + 1,
-                  });
-                }}
-                className="filter-button"
-                style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--emerald)", borderColor: "rgba(52,211,153,0.3)" }}
-              >
-                <RefreshCw size={13} />
-                Rotate Secret Now
-              </button>
-              <button
-                onClick={() => {
-                  setInspectingSecret(null);
-                  setIsRevealed(false);
-                  setRevealCountdown(null);
-                }}
+                onClick={closeInspection}
                 className="primary-button"
                 style={{ padding: "8px 20px" }}
               >

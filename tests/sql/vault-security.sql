@@ -39,12 +39,22 @@ select public.test_denied('update public.workspace_members set role=''security_a
 select public.test_login('00000000-0000-0000-0000-000000000001','aal2','10000000-0000-0000-0000-000000000001');
 select public.vault_create('20000000-0000-0000-0000-000000000001','test record','{"v":1,"keyId":"test-v1","wrappedKey":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==","iv":"AAAAAAAAAAAAAAAA","tag":"AAAAAAAAAAAAAAAAAAAAAA==","ciphertext":"AA=="}'::jsonb);
 select public.test_assert((select count(*)=1 from public.vault_list()),'owner list');
+-- Activity 6 Task 2: module metadata insert/list/rotate functions.
+select public.vault_create_module('20000000-0000-0000-0000-000000000003','module-record','{"v":1,"keyId":"test-v1","wrappedKey":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==","iv":"AAAAAAAAAAAAAAAA","tag":"AAAAAAAAAAAAAAAAAAAAAA==","ciphertext":"AA=="}'::jsonb,'API Key','STAGING','Billing & Payments','60 Days');
+select public.test_assert((select count(*)=1 from public.vault_list_modules() where id='20000000-0000-0000-0000-000000000003'),'module record listed');
+select public.test_assert((select environment='STAGING' and secret_type='API Key' and service='Billing & Payments' and rotation_policy='60 Days' and access_count=0 from public.vault_list_modules() where id='20000000-0000-0000-0000-000000000003'),'module metadata persisted');
+select public.vault_rotate_module('20000000-0000-0000-0000-000000000003',1,'{"v":1,"keyId":"test-v1","wrappedKey":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==","iv":"AAAAAAAAAAAAAAAA","tag":"AAAAAAAAAAAAAAAAAAAAAA==","ciphertext":"AA=="}'::jsonb);
+select public.test_assert((select version=2 from public.vault_list_modules() where id='20000000-0000-0000-0000-000000000003'),'module rotation increments version');
+select public.test_denied('select public.vault_rotate_module(''20000000-0000-0000-0000-000000000003'',1,''{"v":1,"keyId":"test-v1","wrappedKey":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==","iv":"AAAAAAAAAAAAAAAA","tag":"AAAAAAAAAAAAAAAAAAAAAA==","ciphertext":"AA=="}''::jsonb)');
+select public.test_denied('select public.vault_create_module(''20000000-0000-0000-0000-000000000004'',''module-invalid'',''{"v":1,"keyId":"test-v1","wrappedKey":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==","iv":"AAAAAAAAAAAAAAAA","tag":"AAAAAAAAAAAAAAAAAAAAAA==","ciphertext":"AA=="}''::jsonb,''API Key'',''QA'',''Billing Service'',''30 Days'')');
 select public.test_denied('select public.vault_create(''20000000-0000-0000-0000-000000000099'',''invalid'',''{"v":1,"plaintext":"not allowed"}''::jsonb)');
 select public.test_assert(public.vault_read('20000000-0000-0000-0000-000000000001')->>'owner_id'='00000000-0000-0000-0000-000000000001','owner read');
 select public.vault_replace('20000000-0000-0000-0000-000000000001',1,'{"v":1,"keyId":"test-v1","wrappedKey":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==","iv":"AAAAAAAAAAAAAAAA","tag":"AAAAAAAAAAAAAAAAAAAAAA==","ciphertext":"AA=="}'::jsonb);
 select public.test_denied('select public.vault_replace(''20000000-0000-0000-0000-000000000001'',1,''{"v":1,"keyId":"test-v1","wrappedKey":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==","iv":"AAAAAAAAAAAAAAAA","tag":"AAAAAAAAAAAAAAAAAAAAAA==","ciphertext":"AA=="}''::jsonb)');
 select public.test_login('00000000-0000-0000-0000-000000000002','aal2','10000000-0000-0000-0000-000000000002');
 select public.test_assert((select count(*)=0 from public.vault_list()),'other lead cannot list');
+select public.test_assert((select count(*)=0 from public.vault_list_modules()),'other lead cannot list modules');
+select public.test_denied('select public.vault_rotate_module(''20000000-0000-0000-0000-000000000003'',2,''{"v":1,"keyId":"test-v1","wrappedKey":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==","iv":"AAAAAAAAAAAAAAAA","tag":"AAAAAAAAAAAAAAAAAAAAAA==","ciphertext":"AA=="}''::jsonb)');
 select public.test_denied('select public.vault_read(''20000000-0000-0000-0000-000000000001'')');
 select public.test_denied('select public.vault_delete(''20000000-0000-0000-0000-000000000001'')');
 select public.test_denied('select public.vault_replace(''20000000-0000-0000-0000-000000000001'',2,''{"v":1,"keyId":"test-v1","wrappedKey":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==","iv":"AAAAAAAAAAAAAAAA","tag":"AAAAAAAAAAAAAAAAAAAAAA==","ciphertext":"AA=="}''::jsonb)');
@@ -55,6 +65,7 @@ select public.test_login('00000000-0000-0000-0000-000000000003','aal2','10000000
 select public.test_assert((select count(*)=1 from public.vault_list()),'grantee list');
 select public.test_assert(public.vault_read('20000000-0000-0000-0000-000000000001') is not null,'grantee read');
 select public.test_denied('select public.vault_create(''20000000-0000-0000-0000-000000000002'',''forbidden'',''{"v":1,"keyId":"test-v1","wrappedKey":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==","iv":"AAAAAAAAAAAAAAAA","tag":"AAAAAAAAAAAAAAAAAAAAAA==","ciphertext":"AA=="}''::jsonb)');
+select public.test_denied('select public.vault_create_module(''20000000-0000-0000-0000-000000000005'',''module-forbidden'',''{"v":1,"keyId":"test-v1","wrappedKey":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==","iv":"AAAAAAAAAAAAAAAA","tag":"AAAAAAAAAAAAAAAAAAAAAA==","ciphertext":"AA=="}''::jsonb,''API Key'',''DEV'',''Billing Service'',''30 Days'')');
 reset role;
 update vault_private.grants set expires_at=now()-interval '1 minute';
 set role authenticated;
@@ -74,6 +85,7 @@ select public.test_assert(not public.check_workspace_session(),'unseen stale ses
 select public.test_login('00000000-0000-0000-0000-000000000004','aal2','10000000-0000-0000-0000-000000000004');
 select public.test_assert((select count(*)>0 from public.vault_events()),'analyst sees real events');
 select public.test_assert((select count(*)=0 from public.vault_list()),'analyst has no implicit secret access');
+select public.test_assert((select count(*)=0 from public.vault_list_modules()),'analyst has no implicit module access');
 reset role;
 -- Direct-provider enrollment without a bootstrap approval must deny even AAL2.
 insert into auth.mfa_factors values('30000000-0000-0000-0000-000000000099','00000000-0000-0000-0000-000000000004','verified','totp');
