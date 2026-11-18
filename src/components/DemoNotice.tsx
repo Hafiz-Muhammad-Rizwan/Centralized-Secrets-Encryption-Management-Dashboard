@@ -16,7 +16,7 @@ export default function DemoNotice() {
     auditAndCleanBrowserStorage();
     const timer = setTimeout(() => setCleanupFailed(!legacyCleaned), 0);
     return () => clearTimeout(timer);
-  }, []);
+  },  []);
   return (
     <aside className="demo-notice" aria-label="Demo limitations">
       {realPage ? <><strong>Vaultline security workspace.</strong> Production use requires administrator configuration and release verification.</> : <><strong>DEMO WORKSPACE.</strong> Metrics and approval workflows are simulated. Secret Provisioning and Secrets Directory are database-backed when the vault migration and server encryption key are configured; never enter real production credentials.</>}
