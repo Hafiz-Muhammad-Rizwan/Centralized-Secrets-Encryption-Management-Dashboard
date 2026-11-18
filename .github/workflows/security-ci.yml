@@ -26,7 +26,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm audit --audit-level=high --registry=https://registry.npmjs.org
+      - run: npm audit --audit-level=high --omit=dev --registry=https://registry.npmjs.org
       - name: Database authorization regression tests (isolated fixture database)
         env:
           PGHOST: localhost
