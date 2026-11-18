@@ -4,19 +4,19 @@
 begin;
 
 alter table vault_private.secrets
-  add column secret_type text not null default 'API Key'
+  add column if not exists secret_type text not null default 'API Key'
     check (length(secret_type) between 1 and 40),
-  add column environment text not null default 'PROD'
+  add column if not exists environment text not null default 'PROD'
     check (environment in ('PROD','STAGING','DEV')),
-  add column service text not null default ''
+  add column if not exists service text not null default ''
     check (length(service) <= 100),
-  add column rotation_policy text not null default '30 Days'
+  add column if not exists rotation_policy text not null default '30 Days'
     check (length(rotation_policy) between 1 and 40);
 
-create index on vault_private.events(object_id, event);
+create index if not exists idx_vault_events_object_event on vault_private.events(object_id, event);
 
 -- Module 1 (Secret Provisioning): validated, role-gated insert.
-create function public.vault_create_module(
+create or replace function public.vault_create_module(
   secret_id uuid,
   secret_name text,
   sealed jsonb,
@@ -64,7 +64,7 @@ begin
 end $$;
 
 -- Module 2 (Secrets Directory): retrieve visible records without ciphertext.
-create function public.vault_list_modules() returns table(
+create or replace function public.vault_list_modules() returns table(
   id uuid,
   name text,
   owner_id uuid,
@@ -91,7 +91,7 @@ begin
 end $$;
 
 -- Module 2 rotation: re-encrypt an owned record with optimistic concurrency.
-create function public.vault_rotate_module(
+create or replace function public.vault_rotate_module(
   secret_id uuid,
   expected_version integer,
   sealed jsonb

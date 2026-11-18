@@ -115,14 +115,18 @@ export async function provisionModuleSecret(input: unknown): Promise<ModuleResul
       p_service: parsed.service,
       p_rotation_policy: parsed.rotationPolicy,
     });
-    if (error) return denied;
+    if (error) {
+      console.error('[module-provision] Supabase RPC vault_create_module error:', error);
+      return denied;
+    }
 
     return {
       error: '',
       message: 'Secret encrypted and stored in the database.',
       data: { id, name: parsed.name, version: 1 },
     };
-  } catch {
+  } catch (err) {
+    console.error('[module-provision] Unexpected error during provision:', err);
     return denied;
   }
 }
@@ -132,7 +136,10 @@ export async function listModuleSecrets(): Promise<ModuleResult<ModuleSecretRow[
     const { client, access } = await vaultAccess();
     if (!await allowAttempt('module-list', access.userId, 120, 60_000)) return denied;
     const { data, error } = await client.rpc('vault_list_modules');
-    if (error || !Array.isArray(data)) return denied;
+    if (error || !Array.isArray(data)) {
+      if (error) console.error('[module-list] Supabase RPC vault_list_modules error:', error);
+      return denied;
+    }
 
     const rows: ModuleSecretRow[] = [];
     for (const candidate of data) {
@@ -161,7 +168,8 @@ export async function listModuleSecrets(): Promise<ModuleResult<ModuleSecretRow[
       });
     }
     return { error: '', data: rows };
-  } catch {
+  } catch (err) {
+    console.error('[module-list] Unexpected error during list:', err);
     return denied;
   }
 }
