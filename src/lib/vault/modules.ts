@@ -38,6 +38,16 @@ export type ModuleResult<T = undefined> = {
 const denied = {
   error: 'Unable to complete this operation. Check your access or contact the administrator.',
 };
+
+function formatError(err: unknown, defaultMessage = 'Unable to complete this operation. Check your access or contact the administrator.'): string {
+  if (!err) return defaultMessage;
+  const msg = err instanceof Error ? err.message : typeof err === 'object' && err !== null && 'message' in err ? String((err as any).message) : String(err);
+  if (!msg || msg === '{}' || msg === '[object Object]') return defaultMessage;
+  if (msg.includes('vault_private') || msg.includes('relation') || msg.includes('column') || msg.includes('table') || msg.includes('SQL')) {
+    return 'Database error: database operation failed. Check permissions.';
+  }
+  return msg;
+}
 const namePattern = /^[a-z0-9_-]{3,50}$/;
 const typePattern = /^[A-Za-z0-9 ._-]{1,40}$/;
 const servicePattern = /^[A-Za-z0-9 ._/&-]{3,100}$/;
@@ -101,8 +111,12 @@ export async function provisionModuleSecret(input: unknown): Promise<ModuleResul
       };
     }
     const { client, access } = await vaultAccess();
-    if (access.role !== 'team_lead') return denied;
-    if (!await allowAttempt('module-provision', access.userId, 30, 60_000)) return denied;
+    if (access.role !== 'team_lead') {
+      return { error: `Access denied: role '${access.role}' is not permitted to provision secrets (requires team_lead).` };
+    }
+    if (!await allowAttempt('module-provision', access.userId, 30, 60_000)) {
+      return { error: 'Rate limit exceeded for provisioning. Please wait a minute.' };
+    }
 
     const id = randomUUID();
     const sealed = await seal(parsed.value, { id, ownerId: access.userId }, keyManager());
@@ -117,7 +131,7 @@ export async function provisionModuleSecret(input: unknown): Promise<ModuleResul
     });
     if (error) {
       console.error('[module-provision] Supabase RPC vault_create_module error:', error);
-      return denied;
+      return { error: formatError(error, 'Database insert rejected. Ensure SQL migrations are applied.') };
     }
 
     return {
@@ -127,18 +141,20 @@ export async function provisionModuleSecret(input: unknown): Promise<ModuleResul
     };
   } catch (err) {
     console.error('[module-provision] Unexpected error during provision:', err);
-    return denied;
+    return { error: formatError(err) };
   }
 }
 
 export async function listModuleSecrets(): Promise<ModuleResult<ModuleSecretRow[]>> {
   try {
     const { client, access } = await vaultAccess();
-    if (!await allowAttempt('module-list', access.userId, 120, 60_000)) return denied;
+    if (!await allowAttempt('module-list', access.userId, 120, 60_000)) {
+      return { error: 'Rate limit exceeded for secret listing. Please wait a minute.' };
+    }
     const { data, error } = await client.rpc('vault_list_modules');
     if (error || !Array.isArray(data)) {
       if (error) console.error('[module-list] Supabase RPC vault_list_modules error:', error);
-      return denied;
+      return { error: formatError(error, 'Unable to query secret records from database.') };
     }
 
     const rows: ModuleSecretRow[] = [];
@@ -170,7 +186,7 @@ export async function listModuleSecrets(): Promise<ModuleResult<ModuleSecretRow[
     return { error: '', data: rows };
   } catch (err) {
     console.error('[module-list] Unexpected error during list:', err);
-    return denied;
+    return { error: formatError(err) };
   }
 }
 
@@ -224,8 +240,8 @@ export async function getRecentModuleSecrets(
       .filter((row) => row.owner_id === access.userId)
       .slice(0, safeLimit);
     return { error: '', data: userSecrets };
-  } catch {
-    return denied;
+  } catch (err) {
+    return { error: formatError(err) };
   }
 }
 
