@@ -58,6 +58,7 @@ export default function SecretProvisioningModule({
   // UI state
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const [serverError, setServerError] = useState<string>("");
   const [recentlyProvisioned, setRecentlyProvisioned] = useState<SecretRecord | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showRecentValue, setShowRecentValue] = useState(false);
@@ -282,10 +283,12 @@ export default function SecretProvisioningModule({
 
     if (newErrors.length > 0) {
       setErrors(newErrors);
+      setServerError("");
       return;
     }
 
     setErrors([]);
+    setServerError("");
     setSubmitting(true);
 
     try {
@@ -303,9 +306,9 @@ export default function SecretProvisioningModule({
       });
 
       if (result.error || !result.data) {
-        setErrors([
+        setServerError(
           result.error || "The backend could not store this secret. Check the vault configuration and try again.",
-        ]);
+        );
         return;
       }
 
@@ -342,7 +345,7 @@ export default function SecretProvisioningModule({
       setFileSuccess("");
       setShowPassword(false);
     } catch {
-      setErrors(["The backend could not store this secret. Check your connection and try again."]);
+      setServerError("The backend could not store this secret. Check your connection and try again.");
     } finally {
       setSubmitting(false);
     }
@@ -357,6 +360,7 @@ export default function SecretProvisioningModule({
     setFileError("");
     setFileSuccess("");
     setErrors([]);
+    setServerError("");
     setShowPassword(false);
     setXssTestMessage("");
   };
@@ -405,6 +409,28 @@ export default function SecretProvisioningModule({
               <li key={idx} style={{ color: "#fca5a5" }}>{err}</li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Backend Vault Operation Notice (Task 2 & 3) */}
+      {serverError && (
+        <div
+          style={{
+            background: "rgba(239, 68, 68, 0.12)",
+            border: "1px solid rgba(239, 68, 68, 0.4)",
+            borderRadius: "var(--radius)",
+            padding: "16px 20px",
+            marginBottom: "24px",
+            animation: "fadeUp .25s ease-out both",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "var(--crimson)", fontWeight: "600", marginBottom: "6px" }}>
+            <ShieldAlert size={18} />
+            <span>Backend Vault Operation Status</span>
+          </div>
+          <p style={{ margin: "0 0 0 28px", color: "#fca5a5", fontSize: "12.5px", lineHeight: "1.6" }}>
+            {serverError}
+          </p>
         </div>
       )}
 
